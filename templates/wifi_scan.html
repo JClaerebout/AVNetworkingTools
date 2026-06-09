@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}WiFi Scan - Network Manager{% endblock %}
+{% block subtitle %}Scan nearby WiFi networks and highlight channel conflicts.{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>WiFi Scan</h2>
+    <p class="desc">
+        Scans nearby WiFi networks using Windows WLAN scan data.
+        SSIDs with multiple access points are grouped together.
+    </p>
+
+    <div class="row">
+        <div>
+            <label>Status</label>
+            <div id="wifiStatus" class="scan-status">Idle</div>
+        </div>
+    </div>
+
+    <div class="actions">
+        <button id="startWifiScan" class="btn" type="button">Start Scan</button>
+        <button id="stopWifiScan" class="btn warn" type="button">Stop Scan</button>
+    </div>
+</div>
+
+<div class="card scan-results-card">
+    <h2>Possible conflicts</h2>
+    <div id="wifiRecommendation" class="scan-status wifi-recommendation">No 2.4GHz recommendation yet.</div>
+    <div class="table-wrap">
+        <table class="result-table">
+            <thead>
+                <tr>
+                    <th>Severity</th>
+                    <th>SSID</th>
+                    <th>Band</th>
+                    <th>Channel</th>
+                    <th>Signal</th>
+                    <th>BSSID</th>
+                    <th>Reason</th>
+                </tr>
+            </thead>
+            <tbody id="wifiConflicts">
+                <tr><td colspan="7" class="muted-cell">No conflicts found yet.</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card scan-results-card">
+    <h2>Networks</h2>
+    <div id="wifiList" class="wifi-list">
+        <div class="muted-cell">No WiFi results yet.</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const wifiStatus = document.getElementById("wifiStatus");
+const startWifiScanButton = document.getElementById("startWifiScan");
+const stopWifiScanButton = document.getElementById("stopWifiScan");
+const wifiConflicts = document.getElementById("wifiConflicts");
+const wifiRecommendation = document.getElementById("wifiRecommendation");
+const wifiList = document.getElementById("wifiList");
+
+function renderConflicts(conflicts) {
+    wifiConflicts.innerHTML = "";
+
+    if (!conflicts || conflicts.length === 0) {
+        wifiConflicts.innerHTML = '<tr><td colspan="7" class="muted-cell">No conflicts found.</td></tr>';
+        return;
+    }
+
+    for (const item of conflicts) {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+            <td><span class="status-pill ${item.severity}">${item.severity_label || item.severity}</span></td>
+            <td>${item.ssid || "-"}</td>
+            <td>${item.band || "-"}</td>
+            <td>${item.channel || "-"}</td>
+            <td>${item.signal_dbm} dBm / ${item.signal_percent}%</td>
+            <td>${item.bssid || "-"}</td>
+            <td>${item.reason || "-"}</td>
+        `;
+        wifiConflicts.appendChild(row);
+    }
+}
+
+function renderList(groups) {
+    wifiList.innerHTML = "";
+
+    if (!groups || groups.length === 0) {
+        wifiList.innerHTML = '<div class="muted-cell">No WiFi results yet.</div>';
+        return;
+    }
+
+    for (const group of groups) {
+        const details = document.createElement("details");
+        details.className = "wifi-entry";
+
+        const bands = (group.band_summary || []).join(", ");
+
+        details.innerHTML = `
+            <summary>
+                <span class="wifi-ssid">${group.ssid}</span>
+                <span class="wifi-pill">${bands}</span>
+                <span class="wifi-pill">${group.count} AP(s)</span>
+                <span class="wifi-pill">${group.best_signal_dbm} dBm</span>
+            </summary>
+
+            <div class="table-wrap">
+                <table class="result-table">
+                    <thead>
+                        <tr>
+                            <th>Band</th>
+                            <th>Channel</th>
+                            <th>Signal</th>
+                            <th>BSSID</th>
+                            <th>Radio</th>
+                            <th>Security</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${(group.bssids || []).map(ap => `
+                            <tr>
+                                <td>${ap.band}</td>
+                                <td>${ap.channel}</td>
+                                <td>${ap.signal_dbm} dBm / ${ap.signal_percent}%</td>
+                                <td>${ap.bssid}</td>
+                                <td>${ap.radio_type || "-"}</td>
+                                <td>${ap.authentication || "-"} / ${ap.encryption || "-"}</td>
+                            </tr>
+                        `).join("")}
+                    </tbody>
+                </table>
+            </div>
+        `;
+
+        wifiList.appendChild(details);
+    }
+}
+
+function renderWifiStatus(data) {
+    wifiStatus.textContent = data.message || "Idle";
+    startWifiScanButton.disabled = data.running;
+    stopWifiScanButton.disabled = !data.running;
+    wifiRecommendation.textContent =
+        data.channel_recommendation?.message || "No 2.4GHz recommendation yet.";
+
+    renderConflicts(data.conflicts || []);
+    renderList(data.results || []);
+}
+
+async function refreshWifiStatus() {
+    const response = await fetch("{{ url_for('main.wifi_scan_status') }}");
+    renderWifiStatus(await response.json());
+}
+
+async function startWifiScan() {
+    const response = await fetch("{{ url_for('main.wifi_scan_start') }}", {
+        method: "POST"
+    });
+
+    const data = await response.json();
+    renderWifiStatus(data);
+
+    if (!data.success) {
+        alert(data.message);
+    }
+}
+
+async function stopWifiScan() {
+    const response = await fetch("{{ url_for('main.wifi_scan_stop') }}", {
+        method: "POST"
+    });
+
+    renderWifiStatus(await response.json());
+}
+
+startWifiScanButton.addEventListener("click", startWifiScan);
+stopWifiScanButton.addEventListener("click", stopWifiScan);
+
+refreshWifiStatus();
+setInterval(refreshWifiStatus, 1000);
+</script>
+{% endblock %}

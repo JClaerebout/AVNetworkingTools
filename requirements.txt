@@ -1,0 +1,7 @@
+Flask>=3.0.0
+paramiko>=3.4.0
+pyinstaller>=6.0.0
+pyserial>=3.5
+pywebview>=5.0.0
+pywin32>=306
+waitress>=3.0.0

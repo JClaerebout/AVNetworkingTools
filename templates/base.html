@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Network Manager{% endblock %}</title>
+    <style>
+        html,
+        body {
+            background: #242424;
+            color: #e8e8e8;
+        }
+    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header>
+    <div>
+        <h1>Network Manager</h1>
+        <div class="hint">{% block subtitle %}View and change IP, subnet, gateway, DNS, static/DHCP per adapter.{% endblock %}</div>
+    </div>
+    <nav class="header-actions">
+        {% block header_actions %}{% endblock %}
+        <a class="btn secondary" href="{{ url_for('main.index') }}">NICs</a>
+        <a class="btn secondary" href="{{ url_for('main.ping_page') }}">Ping</a>
+        <a class="btn secondary" href="{{ url_for('main.ip_scan_page') }}">IP Scan</a>
+        <a class="btn secondary" href="{{ url_for('main.connection_test_page') }}">Connection Test</a>
+        <a class="btn secondary" href="{{ url_for('main.wifi_scan_page') }}">WiFi Scan</a>
+    </nav>
+</header>
+
+<main class="container">
+    {% block content %}{% endblock %}
+</main>
+
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

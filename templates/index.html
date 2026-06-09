@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block header_actions %}
+<label class="auto-refresh-box">
+    <input id="autoRefresh" type="checkbox">
+    Auto refresh every 15s
+</label>
+<a class="btn secondary" href="{{ url_for('main.index') }}">Refresh</a>
+<label> | </label>
+{% endblock %}
+
+{% block content %}
+    {% if admin %}
+    <!--<div class="top-note ok-note">Running with Administrator rights.</div>-->
+    {% else %}
+    <div class="top-note">Not running as Administrator. Windows will block IP changes without elevated rights.</div>
+    {% endif %}
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="grid">
+        {% for nic in nics %}
+        <div class="card">
+            <h2>{{ nic.name }}</h2>
+            <div class="desc">{{ nic.description }}</div>
+            <div class="status {{ nic.status }}">{{ nic.status }}</div>
+
+            <div class="details">
+                <div class="label">IP</div><div>{{ nic.ip or '-' }}</div>
+                <div class="label">Subnet</div><div>{{ nic.subnet or '-' }}</div>
+                <div class="label">Gateway</div><div>{{ nic.gateway or '-' }}</div>
+                <div class="label">DNS</div><div>{{ nic.dns | join(', ') if nic.dns else '-' }}</div>
+                <div class="label">DHCP raw</div><div>{{ nic.dhcp_raw or '-' }}</div>
+                <div class="label">Link</div><div>{{ nic.link_status }}</div>
+                <div class="label">MAC</div><div>{{ nic.mac or '-' }}</div>
+            </div>
+
+            <form class="config-form" method="post" action="{{ url_for('main.apply_settings') }}">
+                <input type="hidden" name="interface" value="{{ nic.name }}">
+
+                <div>
+                    <label>History</label>
+                    <select class="history-select">
+                        <option value="">Select previous static address...</option>
+                        {% for h in history %}
+                            {% if h.interface == nic.name %}
+                            <option value='{{ h | tojson }}'>
+                                {{ h.ip }} / {{ h.subnet }} | GW {{ h.gateway or '-' }} | DNS {{ h.dns1 }} {{ h.dns2 }}
+                            </option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label>Mode</label>
+                    <select name="mode" class="mode-select">
+                        <option value="static" {% if nic.status == 'static' %}selected{% endif %}>Static</option>
+                        <option value="dhcp" {% if nic.status == 'dhcp' %}selected{% endif %}>DHCP</option>
+                    </select>
+                </div>
+
+                <div class="row static-fields">
+                    <div>
+                        <label>IP address</label>
+                        <input name="ip" value="{{ nic.ip }}" placeholder="192.168.1.50">
+                    </div>
+                    <div>
+                        <label>Subnet mask</label>
+                        <input name="subnet" value="{{ nic.subnet }}" placeholder="255.255.255.0">
+                    </div>
+                </div>
+
+                <div class="row static-fields">
+                    <div>
+                        <label>Gateway</label>
+                        <input name="gateway" value="{{ nic.gateway }}" placeholder="192.168.1.1">
+                    </div>
+                    <div>
+                        <label>DNS servers</label>
+                        <input name="dns" value="{{ nic.dns | join(', ') }}" placeholder="1.1.1.1, 8.8.8.8">
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <button class="btn" type="submit">Apply</button>
+                    {% if nic.status in ['dhcp', 'dhcp_no_lease'] %}
+                    <button class="btn warn" type="submit" form="release-{{ loop.index }}">Release</button>
+                    <button class="btn secondary" type="submit" form="renew-{{ loop.index }}">Renew</button>
+                    {% endif %}
+                </div>
+            </form>
+
+            {% if nic.status in ['dhcp', 'dhcp_no_lease'] %}
+            <form id="release-{{ loop.index }}" method="post" action="{{ url_for('main.dhcp_release') }}">
+                <input type="hidden" name="interface" value="{{ nic.name }}">
+            </form>
+            <form id="renew-{{ loop.index }}" method="post" action="{{ url_for('main.dhcp_renew') }}">
+                <input type="hidden" name="interface" value="{{ nic.name }}">
+            </form>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+{% endblock %}
