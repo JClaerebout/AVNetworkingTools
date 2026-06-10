@@ -450,7 +450,8 @@ input:focus, select:focus {
     color: var(--warn);
 }
 
-.status-pill.info {
+.status-pill.info,
+.status-pill.weak {
     background: rgba(77, 163, 255, .18);
     color: var(--accent);
 }

@@ -28,7 +28,12 @@ python -m unittest discover -s tests
 app.py              Flask app factory and startup
 routes.py           Web routes
 nic_utils.py        Windows NIC scan/change logic
+wifi_utils.py       Wi-Fi scan parsing, grouping, and channel analysis
+scan_utils.py       LAN scan and device monitoring logic
+ping_utils.py       Ping monitor logic
+connection_utils.py TCP/UDP/SSH/serial connection testing
 history.py          Static-address history logic
+connection_history.py Connection preset/history logic
 system_utils.py     Admin check and command runners
 config.py           Paths/config
 templates/          HTML templates
