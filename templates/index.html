@@ -16,17 +16,26 @@
     <div class="top-note">Not running as Administrator. Windows will block IP changes without elevated rights.</div>
     {% endif %}
 
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            {% for category, message in messages %}
-                <div class="flash {{ category }}">{{ message }}</div>
-            {% endfor %}
-        {% endif %}
-    {% endwith %}
+    <div class="notification-area">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash {{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        <div id="operationNotice" class="flash info" role="status" hidden></div>
+    </div>
 
     <div class="grid">
         {% for nic in nics %}
-        <div class="card">
+        <div class="card nic-card">
+            <div class="nic-card-overlay" aria-live="polite" aria-hidden="true">
+                <div class="nic-card-progress" role="status">
+                    <span class="spinner" aria-hidden="true"></span>
+                    <span>Applying network changes...</span>
+                </div>
+            </div>
             <h2>{{ nic.name }}</h2>
             <div class="desc">{{ nic.description }}</div>
             <div class="status {{ nic.status }}">{{ nic.status }}</div>

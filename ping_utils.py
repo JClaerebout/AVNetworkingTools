@@ -60,7 +60,7 @@ def _reader_thread(process: subprocess.Popen, target: str) -> None:
         for line in iter(process.stdout.readline, ""):
             if not line:
                 break
-            _append_output(line.rstrip())
+            _append_output(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {line.rstrip()}")
     except Exception as exc:
         _append_output(f"Ping reader error: {exc}")
     finally:

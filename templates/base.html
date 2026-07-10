@@ -11,7 +11,7 @@
             color: #e8e8e8;
         }
     </style>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=nic-overlay-1">
 </head>
 <body>
 <header>
@@ -33,7 +33,7 @@
     {% block content %}{% endblock %}
 </main>
 
-<script src="{{ url_for('static', filename='app.js') }}"></script>
+<script src="{{ url_for('static', filename='app.js') }}?v=notice-persist-1"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

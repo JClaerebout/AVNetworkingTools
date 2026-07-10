@@ -100,6 +100,48 @@ h1 { margin: 0; font-size: 24px; }
     box-shadow: 0 8px 20px rgba(0,0,0,.2);
 }
 
+.nic-card {
+    position: relative;
+}
+
+.nic-card-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    border-radius: inherit;
+    background: rgba(30, 30, 30, .82);
+    backdrop-filter: blur(2px);
+}
+
+.nic-card.is-busy .nic-card-overlay {
+    display: flex;
+}
+
+.nic-card-progress {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text);
+    font-weight: bold;
+}
+
+.spinner {
+    width: 22px;
+    height: 22px;
+    border: 3px solid rgba(255, 255, 255, .25);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
 .card h2 {
     margin: 0 0 4px 0;
     font-size: 20px;
@@ -197,6 +239,13 @@ input:focus, select:focus {
     border: 1px solid var(--line);
 }
 
+.notification-area {
+    height: 44px;
+    margin-bottom: 15px;
+    border: 1px solid #dcdcdc;
+    border-radius: 12px;
+}
+
 .flash.error {
     border-color: var(--danger);
     color: #ffd1d1;
@@ -205,6 +254,11 @@ input:focus, select:focus {
 .flash.success {
     border-color: var(--ok);
     color: #d8ffe8;
+}
+
+.flash.info {
+    border-color: var(--accent);
+    color: #cfe7ff;
 }
 
 .top-note {
