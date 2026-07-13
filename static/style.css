@@ -52,7 +52,7 @@ h1 { margin: 0; font-size: 24px; }
 
 .btn {
     border: 0;
-    border-radius: 10px;
+    border-radius: 5px;
     padding: 10px 14px;
     background: var(--accent);
     color: white;
@@ -80,7 +80,7 @@ h1 { margin: 0; font-size: 24px; }
     font-size: 13px;
     background: #2b2b2b;
     border: 1px solid var(--line);
-    border-radius: 10px;
+    border-radius: 5px;
     padding: 8px 10px;
 }
 
@@ -95,7 +95,7 @@ h1 { margin: 0; font-size: 24px; }
 .card {
     background: var(--panel);
     border: 1px solid var(--line);
-    border-radius: 18px;
+    border-radius: 9px;
     padding: 18px;
     box-shadow: 0 8px 20px rgba(0,0,0,.2);
 }
@@ -185,7 +185,7 @@ h1 { margin: 0; font-size: 24px; }
     font-size: 14px;
     background: var(--panel2);
     padding: 12px;
-    border-radius: 12px;
+    border-radius: 6px;
     margin-bottom: 15px;
 }
 
@@ -214,7 +214,7 @@ input, select {
     background: #262626;
     color: var(--text);
     border: 1px solid var(--line);
-    border-radius: 10px;
+    border-radius: 5px;
     padding: 10px;
     outline: none;
 }
@@ -233,7 +233,7 @@ input:focus, select:focus {
 
 .flash {
     padding: 12px 14px;
-    border-radius: 12px;
+    border-radius: 6px;
     margin-bottom: 15px;
     background: #444;
     border: 1px solid var(--line);
@@ -242,8 +242,8 @@ input:focus, select:focus {
 .notification-area {
     height: 44px;
     margin-bottom: 15px;
-    border: 1px solid #dcdcdc;
-    border-radius: 12px;
+    border: 1px solid #dcdcdc7f;
+    border-radius: 6px;
 }
 
 .flash.error {
@@ -265,7 +265,7 @@ input:focus, select:focus {
     background: rgba(255,209,102,.1);
     border: 1px solid rgba(255,209,102,.35);
     padding: 12px 14px;
-    border-radius: 14px;
+    border-radius: 7px;
     color: #ffe4a3;
     margin-bottom: 18px;
 }
@@ -281,10 +281,51 @@ input:focus, select:focus {
     overflow: auto;
     white-space: pre-wrap;
     border: 1px solid #555;
-    border-radius: 10px;
+    border-radius: 5px;
     padding: 12px;
     background: #111;
     color: #dcdcdc;
+}
+
+.command-line-card {
+    display: grid;
+    gap: 14px;
+}
+
+.command-output {
+    min-height: 430px;
+    max-height: 60vh;
+    margin: 0;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 14px;
+    background: #0d0d0d;
+    color: #dcdcdc;
+    font-family: Consolas, "Courier New", monospace;
+    line-height: 1.45;
+}
+
+.command-form {
+    gap: 4px;
+}
+
+.command-input-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+}
+
+.command-prompt {
+    color: var(--ok);
+    font: bold 18px Consolas, "Courier New", monospace;
+}
+
+.command-help {
+    margin: 0;
 }
 
 .scan-status {
@@ -294,7 +335,7 @@ input:focus, select:focus {
     background: #262626;
     color: var(--text);
     border: 1px solid var(--line);
-    border-radius: 10px;
+    border-radius: 5px;
     padding: 10px;
 }
 
@@ -309,7 +350,7 @@ input:focus, select:focus {
 .table-wrap {
     overflow: auto;
     border: 1px solid var(--line);
-    border-radius: 12px;
+    border-radius: 6px;
 }
 
 .result-table {
@@ -364,7 +405,7 @@ input:focus, select:focus {
     min-width: 150px;
     background: #262626;
     border: 1px solid var(--line);
-    border-radius: 10px;
+    border-radius: 5px;
     box-shadow: 0 8px 20px rgba(0,0,0,.35);
     overflow: hidden;
 }
@@ -430,7 +471,7 @@ input:focus, select:focus {
 
 .wifi-entry {
     border: 1px solid var(--line);
-    border-radius: 12px;
+    border-radius: 6px;
     background: #202020;
     overflow: hidden;
 }

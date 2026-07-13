@@ -19,6 +19,14 @@ document.querySelectorAll('.config-form').forEach(form => {
         updateStaticVisibility(form);
     });
 
+    // Do not let auto refresh discard values that the user is entering.
+    form.addEventListener('input', () => {
+        form.dataset.userEdited = 'true';
+    });
+    form.addEventListener('change', () => {
+        form.dataset.userEdited = 'true';
+    });
+
     if (historySelect) {
         historySelect.addEventListener('change', event => {
             if (!event.target.value) return;
@@ -103,6 +111,9 @@ document.querySelectorAll('.config-form, form[id^="release-"], form[id^="renew-"
                 showOperationNotice('Network change failed. Please try again.', 'error');
                 return;
             }
+            if (form.classList.contains('config-form')) {
+                delete form.dataset.userEdited;
+            }
             showResponseNotice(request.responseText);
             hideNicBusyOverlay(busyCard);
         };
@@ -120,8 +131,8 @@ if (autoRefresh) {
     const saved = localStorage.getItem('autoRefreshEnabled');
 
     if (saved === null) {
-        autoRefresh.checked = false;
-        localStorage.setItem('autoRefreshEnabled', 'false');
+        autoRefresh.checked = true;
+        localStorage.setItem('autoRefreshEnabled', 'true');
     } else {
         autoRefresh.checked = saved === 'true';
     }
@@ -129,6 +140,18 @@ if (autoRefresh) {
     autoRefresh.addEventListener('change', () => {
         localStorage.setItem('autoRefreshEnabled', autoRefresh.checked ? 'true' : 'false');
     });
+
+    function pageIsActive() {
+        return document.visibilityState === 'visible' && document.hasFocus();
+    }
+
+    function userIsEditingNicSettings() {
+        const activeElement = document.activeElement;
+        const isUsingConfigForm = activeElement && activeElement.closest('.config-form');
+        const hasUnsavedValues = document.querySelector('.config-form[data-user-edited="true"]');
+
+        return Boolean(isUsingConfigForm || hasUnsavedValues);
+    }
 
     setInterval(() => {
 
@@ -139,10 +162,13 @@ if (autoRefresh) {
         if (!nicPage)
             return;
 
-        if (document.hidden)
+        if (!pageIsActive())
             return;
 
-        if (autoRefresh && autoRefresh.checked)
+        if (userIsEditingNicSettings())
+            return;
+
+        if (autoRefresh.checked)
             window.location.reload();
 
     }, 15000);

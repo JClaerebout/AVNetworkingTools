@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Command Line - Network Manager{% endblock %}
+{% block subtitle %}Run Windows commands with the same permissions as Network Manager.{% endblock %}
+
+{% block content %}
+<div class="card command-line-card">
+    <div class="output-header">
+        <div>
+            <h2>Command Line</h2>
+            <p class="desc">Full access is enabled. Commands run locally through cmd.exe.</p>
+        </div>
+        <button id="clearCommandOutput" class="btn secondary" type="button">Clear output</button>
+    </div>
+
+    <div>
+        <label for="commandWorkingDirectory">Working directory</label>
+        <input id="commandWorkingDirectory" value="{{ working_directory }}" autocomplete="off" spellcheck="false">
+    </div>
+
+    <pre id="commandOutput" class="command-output" aria-live="polite">Ready.</pre>
+
+    <form id="commandForm" class="command-form">
+        <label for="commandInput">Command</label>
+        <div class="command-input-row">
+            <span class="command-prompt" aria-hidden="true">&gt;</span>
+            <input id="commandInput" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="ipconfig /all">
+            <button id="runCommand" class="btn" type="submit">Run</button>
+        </div>
+    </form>
+
+    <p class="desc command-help">Use the Up and Down arrow keys to browse command history. Commands time out after 120 seconds.</p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script
+    src="{{ url_for('static', filename='command_line.js') }}?v=1"
+    data-run-url="{{ url_for('main.command_line_run') }}"
+></script>
+{% endblock %}

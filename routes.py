@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from flask import Blueprint, flash, jsonify, redirect, render_template, request, url_for
 
 from history import load_history
@@ -12,6 +14,7 @@ from connection_history import (
     load_connection_history,
     save_connection_history_entry,
 )
+from command_utils import run_command
 
 main_bp = Blueprint("main", __name__)
 
@@ -100,6 +103,21 @@ def ping_stop():
 @main_bp.route("/ping/status")
 def ping_status():
     return jsonify(get_ping_status())
+
+
+@main_bp.route("/command-line")
+def command_line_page():
+    return render_template("command_line.html", working_directory=str(Path.cwd()))
+
+
+@main_bp.route("/command-line/run", methods=["POST"])
+def command_line_run():
+    data = request.get_json(silent=True) or {}
+    result = run_command(
+        data.get("command", ""),
+        data.get("working_directory", ""),
+    )
+    return jsonify(result)
 
 
 

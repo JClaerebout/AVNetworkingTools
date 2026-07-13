@@ -11,7 +11,7 @@
             color: #e8e8e8;
         }
     </style>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=nic-overlay-1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=command-line-1">
 </head>
 <body>
 <header>
@@ -25,6 +25,7 @@
         <a class="btn secondary" href="{{ url_for('main.ping_page') }}">Ping</a>
         <a class="btn secondary" href="{{ url_for('main.ip_scan_page') }}">IP Scan</a>
         <a class="btn secondary" href="{{ url_for('main.connection_test_page') }}">Connection Test</a>
+        <a class="btn secondary" href="{{ url_for('main.command_line_page') }}">Cmd</a>
         <a class="btn secondary" href="{{ url_for('main.wifi_scan_page') }}">WiFi Scan</a>
     </nav>
 </header>
@@ -33,7 +34,7 @@
     {% block content %}{% endblock %}
 </main>
 
-<script src="{{ url_for('static', filename='app.js') }}?v=notice-persist-1"></script>
+<script src="{{ url_for('static', filename='app.js') }}?v=active-auto-refresh-2"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>
