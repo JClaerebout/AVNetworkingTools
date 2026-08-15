@@ -75,3 +75,5 @@ The updater also recognizes the legacy `Network.Manager.exe` and
 The packaged app checks GitHub once when it starts. A newer semantic version is
 offered in the UI. The downloaded EXE must have the SHA-256 digest supplied by
 GitHub's release API before the running EXE will be replaced and restarted.
+The installer records its source path, target path, retries and errors in
+`%APPDATA%\Windows NIC Manager\update.log`.

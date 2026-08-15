@@ -1,4 +1,6 @@
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 import update_utils
@@ -41,6 +43,37 @@ class UpdateTests(unittest.TestCase):
 
         self.assertTrue(result["available"])
         self.assertIn("error", result)
+
+    def test_install_helper_waits_for_launcher_and_records_target(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            source = temp_path / "download" / "NetworkManager.exe"
+            target = temp_path / "installed" / "NetworkManager.exe"
+            source.parent.mkdir()
+            target.parent.mkdir()
+            source.write_bytes(b"new executable")
+            target.write_bytes(b"old executable")
+
+            with (
+                patch("update_utils.sys.frozen", True, create=True),
+                patch("update_utils.sys.executable", str(target)),
+                patch("update_utils.BASE_DIR", temp_path),
+                patch("update_utils.get_update_state", return_value={"status": "ready", "downloaded_path": str(source)}),
+                patch("update_utils.os.getpid", return_value=1234),
+                patch("update_utils.os.getppid", return_value=1233),
+                patch("update_utils.subprocess.Popen") as popen,
+                patch("update_utils.threading.Timer") as timer,
+            ):
+                success, _message = update_utils.install_downloaded_update()
+
+            self.assertTrue(success)
+            command = popen.call_args.args[0]
+            self.assertEqual(command[command.index("-AppProcessId") + 1], "1234")
+            self.assertEqual(command[command.index("-LauncherProcessId") + 1], "1233")
+            self.assertEqual(command[command.index("-Target") + 1], str(target.resolve()))
+            self.assertIn("for ($attempt = 1; $attempt -le 120; $attempt++)", (source.parent / "install-update.ps1").read_text(encoding="utf-8"))
+            self.assertIn(str(target.resolve()), (temp_path / "update.log").read_text(encoding="utf-8"))
+            timer.assert_called_once()
 
 
 if __name__ == "__main__":

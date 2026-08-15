@@ -11,12 +11,12 @@
             color: #e8e8e8;
         }
     </style>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=self-update-2">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=version-header-3">
 </head>
 <body>
 <header>
     <div>
-        <h1>Network Manager</h1>
+        <h1>Network Manager <span class="app-version">v{{ app_version }}</span></h1>
         <div class="hint">{% block subtitle %}View and change IP, subnet, gateway, DNS, static/DHCP per adapter.{% endblock %}</div>
     </div>
     <nav class="header-actions">

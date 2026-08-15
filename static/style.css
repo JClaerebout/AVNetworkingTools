@@ -38,6 +38,18 @@ header {
 
 h1 { margin: 0; font-size: 24px; }
 
+.app-version {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 3px 7px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: normal;
+    vertical-align: middle;
+}
+
 .hint {
     color: var(--muted);
     font-size: 14px;

@@ -3,6 +3,7 @@ from waitress import serve
 
 from config import SECRET_KEY
 from routes import main_bp
+from version import APP_VERSION
 
 import threading
 import time
@@ -13,6 +14,7 @@ import socket
 def create_app() -> Flask:
     app = Flask(__name__)
     app.secret_key = SECRET_KEY
+    app.jinja_env.globals["app_version"] = APP_VERSION
     app.register_blueprint(main_bp)
     return app
 

@@ -6,10 +6,12 @@ import subprocess
 import sys
 import tempfile
 import threading
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
+from config import BASE_DIR
 from version import APP_VERSION, GITHUB_REPOSITORY
 
 
@@ -24,6 +26,19 @@ _update_state = {
     "downloaded_bytes": 0,
     "total_bytes": 0,
 }
+
+
+def _update_log_path() -> Path:
+    return BASE_DIR / "update.log"
+
+
+def _append_update_log(message: str):
+    try:
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with _update_log_path().open("a", encoding="utf-8") as log:
+            log.write(f"[{timestamp}] {message}\n")
+    except OSError:
+        pass
 
 
 def _version_parts(value: str):
@@ -162,25 +177,57 @@ def start_update_download():
 
 def _updater_script():
     return r'''param(
-    [Parameter(Mandatory=$true)][int]$ProcessId,
+    [Parameter(Mandatory=$true)][int]$AppProcessId,
+    [Parameter(Mandatory=$true)][int]$LauncherProcessId,
     [Parameter(Mandatory=$true)][string]$Source,
-    [Parameter(Mandatory=$true)][string]$Target
+    [Parameter(Mandatory=$true)][string]$Target,
+    [Parameter(Mandatory=$true)][string]$LogPath
 )
 $ErrorActionPreference = "Stop"
 $staged = "$Target.update"
 $backup = "$Target.old"
+
+function Write-UpdateLog([string]$Message) {
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    Add-Content -LiteralPath $LogPath -Value "[$timestamp] $Message" -Encoding UTF8
+}
+
 try {
-    Wait-Process -Id $ProcessId -ErrorAction SilentlyContinue
-    Copy-Item -LiteralPath $Source -Destination $staged -Force
-    if (Test-Path -LiteralPath $backup) { Remove-Item -LiteralPath $backup -Force }
-    Move-Item -LiteralPath $Target -Destination $backup -Force
-    try {
-        Move-Item -LiteralPath $staged -Destination $Target -Force
-    } catch {
-        Move-Item -LiteralPath $backup -Destination $Target -Force
-        throw
+    Write-UpdateLog "Helper started. Source='$Source'; Target='$Target'."
+    @($AppProcessId, $LauncherProcessId) |
+        Where-Object { $_ -gt 0 -and $_ -ne $PID } |
+        Select-Object -Unique |
+        ForEach-Object { Wait-Process -Id $_ -ErrorAction SilentlyContinue }
+
+    $installed = $false
+    for ($attempt = 1; $attempt -le 120; $attempt++) {
+        try {
+            if (Test-Path -LiteralPath $staged) { Remove-Item -LiteralPath $staged -Force }
+            Copy-Item -LiteralPath $Source -Destination $staged -Force
+            if (Test-Path -LiteralPath $backup) { Remove-Item -LiteralPath $backup -Force }
+            Move-Item -LiteralPath $Target -Destination $backup -Force
+            try {
+                Move-Item -LiteralPath $staged -Destination $Target -Force
+            } catch {
+                if ((Test-Path -LiteralPath $backup) -and -not (Test-Path -LiteralPath $Target)) {
+                    Move-Item -LiteralPath $backup -Destination $Target -Force
+                }
+                throw
+            }
+            $installed = $true
+            break
+        } catch {
+            Write-UpdateLog "Replacement attempt $attempt failed: $($_.Exception.Message)"
+            Start-Sleep -Seconds 1
+        }
     }
+
+    if (-not $installed) { throw "Could not replace the executable after 120 attempts." }
     Start-Process -FilePath $Target
+    Write-UpdateLog "Update installed successfully and the app was restarted."
+    Remove-Item -LiteralPath $Source -Force -ErrorAction SilentlyContinue
+} catch {
+    Write-UpdateLog "Update installation failed: $($_.Exception.Message)"
 } finally {
     if (Test-Path -LiteralPath $staged) { Remove-Item -LiteralPath $staged -Force }
 }
@@ -202,21 +249,36 @@ def install_downloaded_update():
 
     script_path = source.parent / "install-update.ps1"
     script_path.write_text(_updater_script(), encoding="utf-8")
-    creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "DETACHED_PROCESS", 0)
-    subprocess.Popen(
-        [
-            "powershell.exe",
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy", "Bypass",
-            "-File", str(script_path),
-            "-ProcessId", str(os.getpid()),
-            "-Source", str(source),
-            "-Target", str(target),
-        ],
-        close_fds=True,
-        creationflags=creation_flags,
+    log_path = _update_log_path().resolve()
+    app_process_id = os.getpid()
+    launcher_process_id = os.getppid()
+    _append_update_log(
+        f"Launching update helper. App PID={app_process_id}; launcher PID={launcher_process_id}; "
+        f"source='{source}'; target='{target}'."
     )
+
+    try:
+        subprocess.Popen(
+            [
+                "powershell.exe",
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy", "Bypass",
+                "-File", str(script_path),
+                "-AppProcessId", str(app_process_id),
+                "-LauncherProcessId", str(launcher_process_id),
+                "-Source", str(source),
+                "-Target", str(target),
+                "-LogPath", str(log_path),
+            ],
+            close_fds=True,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except OSError as exc:
+        _append_update_log(f"Could not launch update helper: {exc}")
+        _set_state(status="error", message=f"Could not start the update installer: {exc}")
+        return False, f"Could not start the update installer: {exc}"
+
     _set_state(status="installing", message="Installing update and restarting...")
     threading.Timer(1.0, os._exit, args=(0,)).start()
     return True, "Installing update and restarting..."
