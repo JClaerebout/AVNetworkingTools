@@ -58,5 +58,20 @@ pyinstaller "Network Manager.spec"
 Equivalent one-file command:
 
 ```bat
-python -m PyInstaller --onefile --windowed --uac-admin --add-data "templates;templates" --add-data "static;static" --hidden-import win32timezone --icon=NetworkManager.ico --name "Network Manager" app.py
+python -m PyInstaller --onefile --windowed --uac-admin --add-data "templates;templates" --add-data "static;static" --hidden-import win32timezone --icon=NetworkManager.ico --name "NetworkManager" app.py
 ```
+
+## Releases and automatic updates
+
+Before building a release, update `APP_VERSION` in `version.py`. Create a normal
+(non-draft, non-prerelease) GitHub release with a matching version tag such as
+`V1.1.0`, then attach the built EXE using this name:
+
+- `NetworkManager.exe`
+
+The updater also recognizes the legacy `Network.Manager.exe` and
+`Network Manager.exe` asset names.
+
+The packaged app checks GitHub once when it starts. A newer semantic version is
+offered in the UI. The downloaded EXE must have the SHA-256 digest supplied by
+GitHub's release API before the running EXE will be replaced and restarted.

@@ -21,4 +21,4 @@ if errorlevel 1 (
 )
 
 echo.
-echo Build complete: dist\Network Manager.exe
+echo Build complete: dist\NetworkManager.exe

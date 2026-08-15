@@ -15,8 +15,34 @@ from connection_history import (
     save_connection_history_entry,
 )
 from command_utils import run_command
+from update_utils import check_for_update, get_update_state, install_downloaded_update, start_update_download
 
 main_bp = Blueprint("main", __name__)
+
+
+@main_bp.route("/api/update/check")
+def update_check():
+    try:
+        return jsonify({"success": True, **check_for_update()})
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"Could not check for updates: {exc}"}), 502
+
+
+@main_bp.route("/api/update/download", methods=["POST"])
+def update_download():
+    success, message = start_update_download()
+    return jsonify({"success": success, "message": message}), 200 if success else 409
+
+
+@main_bp.route("/api/update/status")
+def update_status():
+    return jsonify({"success": True, **get_update_state()})
+
+
+@main_bp.route("/api/update/install", methods=["POST"])
+def update_install():
+    success, message = install_downloaded_update()
+    return jsonify({"success": success, "message": message}), 200 if success else 409
 
 
 @main_bp.route("/")

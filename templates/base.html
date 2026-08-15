@@ -11,7 +11,7 @@
             color: #e8e8e8;
         }
     </style>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=command-line-1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=self-update-2">
 </head>
 <body>
 <header>
@@ -34,7 +34,23 @@
     {% block content %}{% endblock %}
 </main>
 
-<script src="{{ url_for('static', filename='app.js') }}?v=mode-aware-auto-refresh-3"></script>
+<div id="updateDialog" class="update-dialog" role="dialog" aria-modal="true" aria-labelledby="updateTitle" hidden>
+    <div class="update-dialog-card">
+        <h2 id="updateTitle">A new version is available</h2>
+        <p id="updateMessage"></p>
+        <div id="updateProgress" class="update-progress" hidden>
+            <div id="updateProgressBar" class="update-progress-bar"></div>
+        </div>
+        <p id="updateStatus" class="hint" role="status"></p>
+        <div class="actions">
+            <button id="updateNow" class="btn" type="button">Update now</button>
+            <button id="updateLater" class="btn secondary" type="button">Later</button>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='app.js') }}?v=mode-aware-auto-refresh-4"></script>
+<script src="{{ url_for('static', filename='updater.js') }}?v=1"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

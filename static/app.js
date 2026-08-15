@@ -167,6 +167,9 @@ if (autoRefresh) {
         if (hasUnappliedModeChange())
             return;
 
+        if (document.body.dataset.updateInProgress === 'true')
+            return;
+
         if (autoRefresh.checked)
             window.location.reload();
 

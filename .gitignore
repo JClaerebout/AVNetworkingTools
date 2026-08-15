@@ -17,6 +17,7 @@ htmlcov/
 
 # PyInstaller build output
 build/
+dist/
 
 # Local logs and runtime state
 *.log

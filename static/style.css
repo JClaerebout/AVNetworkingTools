@@ -559,3 +559,45 @@ input:focus, select:focus {
     background: rgba(77, 163, 255, .18);
     color: var(--accent);
 }
+
+.update-dialog {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(0, 0, 0, .72);
+}
+
+.update-dialog[hidden] {
+    display: none;
+}
+
+.update-dialog-card {
+    width: min(480px, 100%);
+    padding: 24px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: var(--panel);
+    box-shadow: 0 16px 45px rgba(0, 0, 0, .45);
+}
+
+.update-dialog-card h2 {
+    margin: 0 0 10px;
+}
+
+.update-progress {
+    height: 10px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: #1d1d1d;
+}
+
+.update-progress-bar {
+    width: 0;
+    height: 100%;
+    background: var(--accent);
+    transition: width .2s ease;
+}
