@@ -2,8 +2,21 @@
 
 Current release: **V1.2.0**
 
-AVNetKit — Network tools for AV commissioning
-A Windows toolbox designed for AV integrators and programmers to quickly configure network adapters, discover devices, test connections and troubleshoot systems during commissioning.
+AVNetKit — Network tools for AV commissioning.
+A Windows toolbox for AV integrators and programmers to quickly configure network adapters, discover devices, test connections and troubleshoot systems during commissioning.
+
+## Quick start
+
+For a normal user, the workflow is simple:
+
+1. Download the latest `AVNetKit.exe` from the GitHub release.
+2. Place it in a logical folder such as `C:\Tools\AVNetKit` or a project folder you can find easily.
+3. Double-click the EXE to launch it.
+4. If Windows asks for elevation, allow it so the app can manage adapters and network diagnostics.
+
+No Python install, virtual environment or source checkout is required for day-to-day use.
+
+The application opens its own desktop window and runs locally at `http://127.0.0.1:49780`.
 
 ## Features
 
@@ -12,10 +25,8 @@ A Windows toolbox designed for AV integrators and programmers to quickly configu
 - Reuse saved network configurations from local history.
 - Run quick IP/MAC scans or complete scans with manufacturer and hostname data.
 - Enrich an existing quick scan with **Lookup details** without rescanning.
-- Resolve manufacturers immediately from the bundled IEEE MA-L, MA-M and MA-S
-  database using longest-prefix matching.
-- Refresh the local IEEE database weekly in the background while retaining the
-  last valid copy when offline.
+- Resolve manufacturers immediately from the bundled IEEE MA-L, MA-M and MA-S database using longest-prefix matching.
+- Refresh the local IEEE database weekly in the background while retaining the last valid copy when offline.
 - Monitor discovered devices for missing hosts and duplicate-IP conflicts.
 - Export IP-scan results to CSV and ping output to text.
 - Run continuous ping tests with saved history.
@@ -24,7 +35,26 @@ A Windows toolbox designed for AV integrators and programmers to quickly configu
 - Run local command-line diagnostics from the application.
 - Check for, download and install integrity-checked GitHub release updates.
 
-## Run
+## IP scan and manufacturer lookup
+
+**Start Scan** always performs a fresh subnet scan. With **Quick scan** enabled, the result contains IP and MAC information first. When that scan completes, **Lookup details** enriches the existing result without repeating the subnet sweep.
+
+Manufacturer names come from `manufacturer_data/ieee_manufacturers.json` and normally require no per-device internet request. Hostname lookup runs separately with bounded DNS and NetBIOS timeouts. The optional online manufacturer fallback is disabled by default; enable it before startup only when required:
+
+```powershell
+$env:AVNETKIT_ONLINE_VENDOR_LOOKUP="1"
+AVNetKit.exe
+```
+
+The weekly IEEE update runs in the background and stores its persistent copy in `%APPDATA%\AVNetKit\ieee_manufacturers.json`.
+
+---
+
+## Advanced users
+
+The sections below are for developers, maintainers and anyone building or debugging from source.
+
+### Run from source
 
 Open PowerShell or CMD as Administrator:
 
@@ -33,36 +63,13 @@ pip install -r requirements.txt
 python app.py
 ```
 
-The app opens its own desktop window. The local server is bound to
-`http://127.0.0.1:5050`.
-
-## IP scan and manufacturer lookup
-
-**Start Scan** always performs a fresh subnet scan. With **Quick scan** enabled,
-the result contains IP and MAC information first. When that scan completes,
-**Lookup details** enriches the existing result without repeating the subnet
-sweep.
-
-Manufacturer names come from `manufacturer_data/ieee_manufacturers.json` and
-normally require no per-device internet request. Hostname lookup runs separately
-with bounded DNS and NetBIOS timeouts. The optional online manufacturer fallback
-is disabled by default; enable it before startup only when required:
-
-```powershell
-$env:AVNETKIT_ONLINE_VENDOR_LOOKUP="1"
-python app.py
-```
-
-The weekly IEEE update runs in the background and stores its persistent copy in
-`%APPDATA%\AVNetKit\ieee_manufacturers.json`.
-
-## Run tests
+### Run tests
 
 ```bat
 python -m unittest discover -s tests
 ```
 
-## Structure
+### Project structure
 
 ```text
 app.py              Flask app factory and startup
@@ -85,7 +92,7 @@ static/             CSS and JavaScript
 tests/              Unit tests
 ```
 
-## Compile
+### Compile from source
 
 Build with the included script:
 
@@ -105,19 +112,12 @@ Equivalent one-file command:
 python -m PyInstaller --onefile --windowed --uac-admin --add-data "templates;templates" --add-data "static;static" --add-data "manufacturer_data;manufacturer_data" --hidden-import win32timezone --icon=AVNetKit.ico --name "AVNetKit" app.py
 ```
 
-## Releases and automatic updates
+### Releases and automatic updates
 
-The current application version is defined once in `version.py` and is displayed
-in the UI, used in update requests, and compared with GitHub release tags.
+The current application version is defined once in `version.py` and is displayed in the UI, used in update requests, and compared with GitHub release tags.
 
-For this release, build with `APP_VERSION = "1.2.0"` and create a normal
-(non-draft, non-prerelease) GitHub release tagged `V1.2.0`. Attach the built EXE
-using this name:
+For this release, build with `APP_VERSION = "1.2.0"` and create a normal (non-draft, non-prerelease) GitHub release tagged `V1.2.0`. Attach the built EXE using this name:
 
 - `AVNetKit.exe`
 
-The packaged app checks GitHub once when it starts. A newer semantic version is
-offered in the UI. The downloaded EXE must have the SHA-256 digest supplied by
-GitHub's release API before the running EXE will be replaced and restarted.
-The installer records its source path, target path, retries and errors in
-`%APPDATA%\AVNetKit\update.log`.
+The packaged app checks GitHub once when it starts. A newer semantic version is offered in the UI. The downloaded EXE must have the SHA-256 digest supplied by GitHub's release API before the running EXE will be replaced and restarted. The installer records its source path, target path, retries and errors in `%APPDATA%\AVNetKit\update.log`.

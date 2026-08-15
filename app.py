@@ -23,16 +23,19 @@ def create_app() -> Flask:
 app = create_app()
 
 
+DEFAULT_PORT = 49780
+
+
 def start_flask():
     serve(
         app,
         host="127.0.0.1",
-        port=5050,
+        port=DEFAULT_PORT,
         threads=8,
     )
 
 
-def wait_for_flask(host="127.0.0.1", port=5050, timeout=10):
+def wait_for_flask(host="127.0.0.1", port=DEFAULT_PORT, timeout=10):
     start_time = time.time()
 
     while time.time() - start_time < timeout:
@@ -56,7 +59,7 @@ if __name__ == "__main__":
 
     webview.create_window(
         "AVNetKit",
-        "http://127.0.0.1:5050",
+        f"http://127.0.0.1:{DEFAULT_PORT}",
         width=1500,
         height=950,
         resizable=True,
