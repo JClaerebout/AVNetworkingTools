@@ -8,7 +8,9 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional
 
+from config import MANUFACTURER_ONLINE_FALLBACK
 from nic_utils import get_nics, subnet_to_prefix
+from manufacturer_db import lookup_local_manufacturer
 from system_utils import run_cmd
 
 _MAX_HOSTS = 1024
@@ -17,6 +19,7 @@ _MONITOR_MISSING_AFTER = 3
 
 _scan_lock = threading.Lock()
 _scan_thread: Optional[threading.Thread] = None
+_lookup_thread: Optional[threading.Thread] = None
 _scan_stop = threading.Event()
 _scan_running = False
 _lookup_running = False
@@ -31,6 +34,7 @@ _last_scan_context = {
     "network": "",
     "hosts": [],
     "quick_scan": False,
+    "completed": False,
 }
 _scan_message = "Idle"
 _scan_total = 0
@@ -131,6 +135,20 @@ def _get_arp_entries(source_ip: str) -> Dict[str, str]:
 
 
 def _reverse_dns(ip: str) -> str:
+    if sys.platform == "win32":
+        code, stdout, stderr = run_cmd([
+            "powershell",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy", "Bypass",
+            "-Command",
+            (
+                f"try {{ (Resolve-DnsName -Name '{ip}' -Type PTR -QuickTimeout "
+                "-ErrorAction Stop).NameHost } catch { '' }"
+            ),
+        ], timeout=2)
+        return stdout.strip().strip(".") if code == 0 else ""
+
     try:
         return socket.gethostbyaddr(ip)[0]
     except Exception:
@@ -140,7 +158,7 @@ def _netbios_name(ip: str) -> str:
     if sys.platform != "win32":
         return ""
 
-    code, stdout, stderr = run_cmd(["nbtstat", "-A", ip])
+    code, stdout, stderr = run_cmd(["nbtstat", "-A", ip], timeout=2)
     if code != 0:
         return ""
 
@@ -165,37 +183,6 @@ def lookup_hostname(ip: str) -> str:
     if netbios:
         return netbios
 
-    mdns = _mdns_name(ip)
-
-    if mdns:
-        return mdns
-
-    return ""
-
-def _mdns_name(ip: str) -> str:
-    code, stdout, stderr = run_cmd([
-        "powershell",
-        "-NoProfile",
-        "-ExecutionPolicy", "Bypass",
-        "-Command",
-        f"""
-        try {{
-            $result = Resolve-DnsName -Name {ip} -Type PTR -ErrorAction Stop
-            $result.NameHost
-        }} catch {{
-            ""
-        }}
-        """
-    ])
-
-    if code != 0:
-        return ""
-
-    name = stdout.strip().strip(".")
-
-    if name.endswith(".local"):
-        return name
-
     return ""
 
 def _lookup_new_monitor_device(ip: str, mac: str) -> None:
@@ -206,23 +193,6 @@ def _lookup_new_monitor_device(ip: str, mac: str) -> None:
     })
 
     manufacturer = lookup_manufacturer(mac)
-
-    if manufacturer == "Unknown":
-        current_oui = _oui(mac)
-
-        with _scan_lock:
-            for result in _scan_results:
-                other_mac = result.get("mac", "")
-                other_manufacturer = result.get("manufacturer", "")
-
-                if (
-                    current_oui
-                    and _oui(other_mac) == current_oui
-                    and other_manufacturer
-                    and other_manufacturer not in {"Unknown", "Looking up...", "-"}
-                ):
-                    manufacturer = other_manufacturer
-                    break
 
     _update_result(ip, {
         "hostname": hostname,
@@ -424,25 +394,32 @@ def set_monitor_paused(paused: bool) -> tuple[bool, str]:
 
     return True, "Monitoring paused." if paused else "Monitoring resumed."
 
-def _oui(mac: str) -> str:
-    clean = re.sub(r"[^0-9A-Fa-f]", "", mac or "").upper()
-    return clean[:6] if len(clean) >= 6 else ""
+def lookup_manufacturer(mac: str, allow_online: Optional[bool] = None) -> str:
+    clean_mac = re.sub(r"[^0-9A-Fa-f]", "", mac or "").upper()
+    if len(clean_mac) != 12:
+        return "Unknown"
 
+    if int(clean_mac[:2], 16) & 0x03:
+        return "Unknown"
 
-def lookup_manufacturer(mac: str) -> str:
-    oui = _oui(mac)
-    if not oui:
+    local_manufacturer = lookup_local_manufacturer(clean_mac)
+    if local_manufacturer:
+        return local_manufacturer
+
+    if allow_online is None:
+        allow_online = MANUFACTURER_ONLINE_FALLBACK
+    if not allow_online:
         return "Unknown"
 
     with _vendor_lock:
-        cached = _vendor_cache.get(oui)
+        cached = _vendor_cache.get(clean_mac)
         if cached and cached != "Unknown":
             return cached
 
     try:
         time.sleep(0.35)
 
-        url = f"https://api.macvendors.com/{oui}"
+        url = f"https://api.macvendors.com/{clean_mac}"
         req = urllib.request.Request(url, headers={"User-Agent": "Network-Manager"})
 
         with urllib.request.urlopen(req, timeout=10) as response:
@@ -456,7 +433,7 @@ def lookup_manufacturer(mac: str) -> str:
     # Never let a failed lookup overwrite a good cached value.
     if vendor != "Unknown":
         with _vendor_lock:
-            _vendor_cache[oui] = vendor
+            _vendor_cache[clean_mac] = vendor
 
     return vendor
 
@@ -487,21 +464,35 @@ def _set_pending_lookup_values_to_dash() -> None:
                 result["manufacturer"] = "-"
 
 
-def _lookup_worker() -> None:
+def _lookup_worker(reused_quick_scan: bool = False) -> None:
     global _lookup_running, _lookup_total, _lookup_done, _scan_message
 
     with _scan_lock:
-        items = list(_scan_results)
+        items = [item for item in _scan_results if not item.get("is_local")]
         _lookup_total = len(items)
         _lookup_done = 0
         _lookup_running = bool(items)
         if items:
-            _scan_message = f"Scan complete. Looking up hostname and manufacturer for {len(items)} device(s)..."
+            prefix = "Quick scan reused." if reused_quick_scan else "Scan complete."
+            _scan_message = f"{prefix} Loading local manufacturers for {len(items)} device(s)..."
 
     if not items:
         with _scan_lock:
             _lookup_running = False
+            if reused_quick_scan:
+                _last_scan_context["quick_scan"] = False
+                _scan_message = f"Extended scan complete. Found {len(_scan_results)} device(s)."
+            else:
+                _scan_message = f"Lookup complete. Found {len(_scan_results)} device(s)."
         return
+
+    # Local database lookups complete before any potentially slow hostname work.
+    for item in items:
+        manufacturer = lookup_manufacturer(item.get("mac", ""), allow_online=False)
+        _update_result(item.get("ip", ""), {"manufacturer": manufacturer})
+
+    with _scan_lock:
+        _scan_message = f"Local manufacturers loaded. Looking up hostnames for {len(items)} device(s)..."
 
     def lookup_item(item: Dict) -> None:
         if _scan_stop.is_set():
@@ -519,43 +510,16 @@ def _lookup_worker() -> None:
             "hostname": hostname
         })
 
-        manufacturer = lookup_manufacturer(mac)
-
-        if _scan_stop.is_set():
-            return
-
-        _update_result(ip, {
-            "manufacturer": manufacturer
-        })
-
-        # If lookup failed, try to reuse manufacturer from another device with same OUI.
-        if manufacturer == "Unknown":
-            current_oui = _oui(mac)
-
-            with _scan_lock:
-                for result in _scan_results:
-                    other_mac = result.get("mac", "")
-                    other_manufacturer = result.get("manufacturer", "")
-
-                    if (
-                        current_oui
-                        and _oui(other_mac) == current_oui
-                        and other_manufacturer
-                        and other_manufacturer not in {"Unknown", "Looking up..."}
-                    ):
-                        manufacturer = other_manufacturer
-                        break
-
-        _update_result(ip, {
-            "hostname": hostname,
-            "manufacturer": manufacturer,
-        })
+        if MANUFACTURER_ONLINE_FALLBACK and item.get("manufacturer") == "Unknown":
+            manufacturer = lookup_manufacturer(mac, allow_online=True)
+            if not _scan_stop.is_set():
+                _update_result(ip, {"manufacturer": manufacturer})
 
         global _lookup_done
         with _scan_lock:
             _lookup_done += 1
 
-    workers = min(6, max(2, len(items)))
+    workers = min(12, max(4, len(items)))
 
     with ThreadPoolExecutor(max_workers=workers) as executor:
         futures = [executor.submit(lookup_item, item) for item in items]
@@ -573,10 +537,15 @@ def _lookup_worker() -> None:
         if _scan_stop.is_set():
             _scan_message = "Lookup stopped."
         else:
-            _scan_message = f"Lookup complete. Found {len(_scan_results)} device(s)."
+            if reused_quick_scan:
+                _last_scan_context["quick_scan"] = False
+                _scan_message = f"Extended scan complete. Found {len(_scan_results)} device(s)."
+            else:
+                _scan_message = f"Lookup complete. Found {len(_scan_results)} device(s)."
 
 def _scan_worker(interface_name: str, custom_subnet: str = "", quick_scan: bool = False) -> None:
-    global _scan_running, _scan_message, _scan_total, _scan_done, _large_scan_quick_only
+    global _scan_running, _scan_message, _scan_total, _scan_done
+    global _large_scan_quick_only, _scan_results
 
     ok, nic_or_message = _find_nic(interface_name)
     if not ok:
@@ -608,6 +577,7 @@ def _scan_worker(interface_name: str, custom_subnet: str = "", quick_scan: bool 
         _last_scan_context["network"] = str(network)
         _last_scan_context["hosts"] = hosts
         _last_scan_context["quick_scan"] = quick_scan
+        _last_scan_context["completed"] = False
 
     if len(hosts) > _MAX_HOSTS:
         quick_scan = True
@@ -690,6 +660,7 @@ def _scan_worker(interface_name: str, custom_subnet: str = "", quick_scan: bool 
             _scan_message = "Scan stopped."
             return
 
+        _last_scan_context["completed"] = True
         _scan_message = f"Scan complete. Found {found} device(s)."
 
     if found and not quick_scan:
@@ -738,6 +709,46 @@ def start_scan(interface_name: str, custom_subnet: str = "", quick_scan: bool = 
     return True, "Scan started."
 
 
+def start_lookup() -> tuple[bool, str]:
+    global _lookup_thread, _lookup_running, _monitor_running, _monitor_paused, _scan_message
+
+    with _scan_lock:
+        if _scan_running or _lookup_running:
+            return False, "A scan or lookup is already running."
+
+        if (
+            not _scan_results
+            or not _last_scan_context.get("completed")
+            or not _last_scan_context.get("quick_scan")
+        ):
+            return False, "Run a quick scan before looking up device details."
+
+        if _large_scan_quick_only:
+            return False, "Detail lookup is disabled for subnets larger than 1024 hosts."
+
+        _scan_stop.clear()
+        _monitor_stop.set()
+        _monitor_running = False
+        _monitor_paused = False
+
+        for result in _scan_results:
+            if not result.get("is_local"):
+                result["manufacturer"] = "Looking up..."
+                result["hostname"] = "Looking up..."
+
+        _lookup_running = True
+        _scan_message = "Quick scan reused. Starting local manufacturer and hostname lookup..."
+
+    _lookup_thread = threading.Thread(
+        target=_lookup_worker,
+        args=(True,),
+        daemon=True,
+    )
+    _lookup_thread.start()
+
+    return True, "Device detail lookup started."
+
+
 def stop_scan() -> tuple[bool, str]:
     global _scan_message
 
@@ -758,12 +769,21 @@ def stop_scan() -> tuple[bool, str]:
 
 def get_scan_status() -> Dict:
     with _scan_lock:
+        can_lookup = (
+            not _scan_running
+            and not _lookup_running
+            and bool(_scan_results)
+            and bool(_last_scan_context.get("completed"))
+            and bool(_last_scan_context.get("quick_scan"))
+            and not _large_scan_quick_only
+        )
         return {
             "running": _scan_running,
             "lookup_running": _lookup_running,
             "monitor_running": _monitor_running,
             "monitor_paused": _monitor_paused,
             "large_scan_quick_only": _large_scan_quick_only,
+            "can_lookup": can_lookup,
             "message": _scan_message,
             "total": _scan_total,
             "done": _scan_done,

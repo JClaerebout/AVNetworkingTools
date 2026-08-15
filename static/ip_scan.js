@@ -5,6 +5,7 @@
     const customSubnetInput = document.getElementById("customSubnet");
     const quickScanCheckbox = document.getElementById("quickScan");
     const startScanButton = document.getElementById("startScan");
+    const lookupDetailsButton = document.getElementById("lookupDetails");
     const stopScanButton = document.getElementById("stopScan");
     const scanStatus = document.getElementById("scanStatus");
     const scanResults = document.getElementById("scanResults");
@@ -121,6 +122,8 @@
         scanStatus.textContent = `${data.message || "Idle"}${progress}${monitorText}`;
 
         startScanButton.disabled = data.running || data.lookup_running;
+        lookupDetailsButton.style.display = data.can_lookup ? "" : "none";
+        lookupDetailsButton.disabled = data.running || data.lookup_running;
         stopScanButton.disabled = !data.running && !data.lookup_running && !data.monitor_running;
         quickScanCheckbox.disabled = data.running || data.lookup_running;
 
@@ -180,6 +183,19 @@
         });
 
         renderStatus(await response.json());
+    }
+
+    async function lookupDetails() {
+        const response = await fetch(urls.lookupUrl, {
+            method: "POST"
+        });
+
+        const data = await response.json();
+        renderStatus(data);
+
+        if (!data.success) {
+            alert(data.message);
+        }
     }
 
     async function setMonitor(enabled) {
@@ -246,6 +262,7 @@
     }
 
     startScanButton.addEventListener("click", startScan);
+    lookupDetailsButton.addEventListener("click", lookupDetails);
     stopScanButton.addEventListener("click", stopScan);
     downloadCsvButton.addEventListener("click", () => {
         window.location.href = urls.exportUrl;

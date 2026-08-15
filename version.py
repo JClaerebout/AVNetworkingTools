@@ -1,2 +1,2 @@
-APP_VERSION = "1.0.4"
+APP_VERSION = "1.2.0"
 GITHUB_REPOSITORY = "JClaerebout/windows_nic_manager"

@@ -42,6 +42,7 @@
 
     <div class="actions">
         <button id="startScan" class="btn" type="button">Start Scan</button>
+        <button id="lookupDetails" class="btn secondary" type="button" style="display:none;">Lookup details</button>
         <button id="stopScan" class="btn warn" type="button">Stop Scan</button>
 
         <label class="auto-refresh-box">
@@ -98,10 +99,11 @@
 
 {% block scripts %}
 <script
-    src="{{ url_for('static', filename='ip_scan.js') }}?v=csv-export-1"
+    src="{{ url_for('static', filename='ip_scan.js') }}?v=lookup-details-1"
     data-status-url="{{ url_for('main.ip_scan_status') }}"
     data-export-url="{{ url_for('main.ip_scan_export') }}"
     data-start-url="{{ url_for('main.ip_scan_start') }}"
+    data-lookup-url="{{ url_for('main.ip_scan_lookup') }}"
     data-stop-url="{{ url_for('main.ip_scan_stop') }}"
     data-monitor-start-url="{{ url_for('main.ip_scan_monitor_start') }}"
     data-monitor-stop-url="{{ url_for('main.ip_scan_monitor_stop') }}"

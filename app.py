@@ -9,6 +9,7 @@ import threading
 import time
 import webview
 import socket
+from manufacturer_db import start_manufacturer_database_update
 
 
 def create_app() -> Flask:
@@ -45,6 +46,8 @@ def wait_for_flask(host="127.0.0.1", port=5050, timeout=10):
 
 
 if __name__ == "__main__":
+
+    start_manufacturer_database_update()
 
     flask_thread = threading.Thread(target=start_flask, daemon=True)
     flask_thread.start()

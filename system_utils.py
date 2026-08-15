@@ -1,7 +1,7 @@
 import ctypes
 import subprocess
 import sys
-from typing import List
+from typing import List, Optional
 
 
 def is_admin() -> bool:
@@ -10,7 +10,7 @@ def is_admin() -> bool:
     except Exception:
         return False
 
-def run_cmd(command: List[str]) -> tuple[int, str, str]:
+def run_cmd(command: List[str], timeout: Optional[float] = None) -> tuple[int, str, str]:
     """Run a command hidden in the background and return code, stdout, stderr."""
     try:
         startupinfo = None
@@ -31,8 +31,11 @@ def run_cmd(command: List[str]) -> tuple[int, str, str]:
             shell=False,
             startupinfo=startupinfo,
             creationflags=creationflags,
+            timeout=timeout,
         )
         return result.returncode, result.stdout.strip(), result.stderr.strip()
+    except subprocess.TimeoutExpired:
+        return 124, "", f"Command timed out after {timeout} seconds."
     except Exception as exc:
         return 1, "", str(exc)
 

@@ -5,6 +5,9 @@ import sys
 
 APP_NAME = "Windows NIC Manager"
 SECRET_KEY = os.getenv("NETWORK_MANAGER_SECRET_KEY", "local-network-manager-secret")
+MANUFACTURER_ONLINE_FALLBACK = os.getenv(
+    "NETWORK_MANAGER_ONLINE_VENDOR_LOOKUP", "0"
+).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def get_base_dir() -> Path:
@@ -35,3 +38,4 @@ BASE_DIR = get_base_dir()
 HISTORY_FILE = BASE_DIR / "nic_history.json"
 PING_HISTORY_FILE = BASE_DIR / "ping_history.json"
 CONNECTION_HISTORY_FILE = BASE_DIR / "connection_history.json"
+MANUFACTURER_DB_FILE = BASE_DIR / "ieee_manufacturers.json"

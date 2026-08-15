@@ -8,7 +8,7 @@ from flask import Blueprint, Response, flash, jsonify, redirect, render_template
 from history import load_history
 from ping_utils import get_ping_status, load_ping_history, start_ping, stop_ping
 from nic_utils import clean_dns, get_nics, release_dhcp, renew_dhcp, set_dhcp, set_static
-from scan_utils import get_scannable_nics, get_scan_status, start_scan, stop_scan, start_monitor, stop_monitor, set_monitor_paused
+from scan_utils import get_scannable_nics, get_scan_status, start_lookup, start_scan, stop_scan, start_monitor, stop_monitor, set_monitor_paused
 from connection_utils import get_connection_status, get_serial_ports, send_data, start_connection, stop_connection
 from system_utils import is_admin
 from wifi_utils import get_wifi_status, start_wifi_scan, stop_wifi_scan
@@ -239,6 +239,12 @@ def ip_scan_start():
 @main_bp.route("/ip-scan/stop", methods=["POST"])
 def ip_scan_stop():
     success, message = stop_scan()
+    return jsonify({"success": success, "message": message, **get_scan_status()})
+
+
+@main_bp.route("/ip-scan/lookup", methods=["POST"])
+def ip_scan_lookup():
+    success, message = start_lookup()
     return jsonify({"success": success, "message": message, **get_scan_status()})
 
 
