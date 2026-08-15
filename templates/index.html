@@ -71,7 +71,7 @@
                     <label>Mode</label>
                     <select name="mode" class="mode-select">
                         <option value="static" {% if nic.status == 'static' %}selected{% endif %}>Static</option>
-                        <option value="dhcp" {% if nic.status == 'dhcp' %}selected{% endif %}>DHCP</option>
+                        <option value="dhcp" {% if nic.status in ['dhcp', 'dhcp_no_lease'] %}selected{% endif %}>DHCP</option>
                     </select>
                 </div>
 

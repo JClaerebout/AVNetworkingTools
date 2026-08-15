@@ -7,24 +7,29 @@ function updateStaticVisibility(form) {
     });
 }
 
+function updateModeChangeState(form) {
+    const modeSelect = form.querySelector('.mode-select');
+    if (!modeSelect) return;
+
+    if (modeSelect.value === form.dataset.appliedMode) {
+        delete form.dataset.modeChangePending;
+    } else {
+        form.dataset.modeChangePending = 'true';
+    }
+}
+
 document.querySelectorAll('.config-form').forEach(form => {
     const modeSelect = form.querySelector('.mode-select');
     const historySelect = form.querySelector('.history-select');
 
     if (!modeSelect) return;
 
+    form.dataset.appliedMode = modeSelect.value;
     updateStaticVisibility(form);
 
     modeSelect.addEventListener('change', () => {
         updateStaticVisibility(form);
-    });
-
-    // Do not let auto refresh discard values that the user is entering.
-    form.addEventListener('input', () => {
-        form.dataset.userEdited = 'true';
-    });
-    form.addEventListener('change', () => {
-        form.dataset.userEdited = 'true';
+        updateModeChangeState(form);
     });
 
     if (historySelect) {
@@ -38,6 +43,7 @@ document.querySelectorAll('.config-form').forEach(form => {
             form.querySelector('[name="gateway"]').value = h.gateway || '';
             form.querySelector('[name="dns"]').value = [h.dns1, h.dns2].filter(Boolean).join(', ');
             updateStaticVisibility(form);
+            updateModeChangeState(form);
         });
     }
 });
@@ -90,9 +96,12 @@ function showResponseNotice(responseHtml) {
     const flash = response.content.querySelector('.flash');
 
     if (flash) {
-        showOperationNotice(flash.textContent, flash.classList.contains('error') ? 'error' : 'success');
+        const failed = flash.classList.contains('error');
+        showOperationNotice(flash.textContent, failed ? 'error' : 'success');
+        return !failed;
     } else {
         showOperationNotice('Network changes completed.', 'success');
+        return true;
     }
 }
 
@@ -111,10 +120,11 @@ document.querySelectorAll('.config-form, form[id^="release-"], form[id^="renew-"
                 showOperationNotice('Network change failed. Please try again.', 'error');
                 return;
             }
-            if (form.classList.contains('config-form')) {
-                delete form.dataset.userEdited;
+            const operationSucceeded = showResponseNotice(request.responseText);
+            if (form.classList.contains('config-form') && operationSucceeded) {
+                form.dataset.appliedMode = form.querySelector('.mode-select').value;
+                delete form.dataset.modeChangePending;
             }
-            showResponseNotice(request.responseText);
             hideNicBusyOverlay(busyCard);
         };
         request.onerror = () => {
@@ -141,16 +151,8 @@ if (autoRefresh) {
         localStorage.setItem('autoRefreshEnabled', autoRefresh.checked ? 'true' : 'false');
     });
 
-    function pageIsActive() {
-        return document.visibilityState === 'visible' && document.hasFocus();
-    }
-
-    function userIsEditingNicSettings() {
-        const activeElement = document.activeElement;
-        const isUsingConfigForm = activeElement && activeElement.closest('.config-form');
-        const hasUnsavedValues = document.querySelector('.config-form[data-user-edited="true"]');
-
-        return Boolean(isUsingConfigForm || hasUnsavedValues);
+    function hasUnappliedModeChange() {
+        return Boolean(document.querySelector('.config-form[data-mode-change-pending="true"]'));
     }
 
     setInterval(() => {
@@ -162,10 +164,7 @@ if (autoRefresh) {
         if (!nicPage)
             return;
 
-        if (!pageIsActive())
-            return;
-
-        if (userIsEditingNicSettings())
+        if (hasUnappliedModeChange())
             return;
 
         if (autoRefresh.checked)
