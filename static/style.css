@@ -64,6 +64,7 @@ h1 { margin: 0; font-size: 24px; }
 
 .btn.secondary { background: #555; }
 .btn.warn { background: #b8860b; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
 
 .header-actions {
     display: flex;

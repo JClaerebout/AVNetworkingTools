@@ -56,10 +56,13 @@
 <div class="card scan-results-card">
     <div class="results-header-row">
         <h2>Results</h2>
-        <label id="monitorBox" class="auto-refresh-box" style="display:none;">
-            <input id="monitorScan" type="checkbox">
-            Monitor
-        </label>
+        <div class="actions">
+            <button id="downloadScanCsv" class="btn secondary" type="button" disabled>Download CSV</button>
+            <label id="monitorBox" class="auto-refresh-box" style="display:none;">
+                <input id="monitorScan" type="checkbox">
+                Monitor
+            </label>
+        </div>
     </div>
 
     <div class="scan-filter-row">
@@ -95,8 +98,9 @@
 
 {% block scripts %}
 <script
-    src="{{ url_for('static', filename='ip_scan.js') }}"
+    src="{{ url_for('static', filename='ip_scan.js') }}?v=csv-export-1"
     data-status-url="{{ url_for('main.ip_scan_status') }}"
+    data-export-url="{{ url_for('main.ip_scan_export') }}"
     data-start-url="{{ url_for('main.ip_scan_start') }}"
     data-stop-url="{{ url_for('main.ip_scan_stop') }}"
     data-monitor-start-url="{{ url_for('main.ip_scan_monitor_start') }}"

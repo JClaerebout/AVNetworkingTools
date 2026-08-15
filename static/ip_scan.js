@@ -8,6 +8,7 @@
     const stopScanButton = document.getElementById("stopScan");
     const scanStatus = document.getElementById("scanStatus");
     const scanResults = document.getElementById("scanResults");
+    const downloadCsvButton = document.getElementById("downloadScanCsv");
 
     const scanFilter = document.getElementById("scanFilter");
     const clearScanFilter = document.getElementById("clearScanFilter");
@@ -125,6 +126,7 @@
 
         const scanFinished = !data.running && !data.lookup_running;
         const hasResults = data.results && data.results.length > 0;
+        downloadCsvButton.disabled = !hasResults;
         const allowMonitor = !data.large_scan_quick_only;
 
         monitorBox.style.display = scanFinished && hasResults && allowMonitor ? "flex" : "none";
@@ -245,6 +247,9 @@
 
     startScanButton.addEventListener("click", startScan);
     stopScanButton.addEventListener("click", stopScan);
+    downloadCsvButton.addEventListener("click", () => {
+        window.location.href = urls.exportUrl;
+    });
 
     scanFilter.addEventListener("input", () => {
         renderResults(latestResults);

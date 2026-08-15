@@ -1,6 +1,9 @@
+import csv
+import io
+from datetime import datetime
 from pathlib import Path
 
-from flask import Blueprint, flash, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, Response, flash, jsonify, redirect, render_template, request, url_for
 
 from history import load_history
 from ping_utils import get_ping_status, load_ping_history, start_ping, stop_ping
@@ -226,6 +229,46 @@ def ip_scan_stop():
 @main_bp.route("/ip-scan/status")
 def ip_scan_status():
     return jsonify(get_scan_status())
+
+
+def _safe_csv_value(value):
+    text = str(value or "")
+    if text.lstrip().startswith(("=", "+", "-", "@")):
+        return f"'{text}"
+    return text
+
+
+def _scan_result_status(item):
+    if item.get("is_local"):
+        return "This PC"
+    if item.get("missing"):
+        return "Missing"
+    if item.get("duplicate_ip"):
+        return "Duplicate IP"
+    return "OK"
+
+
+@main_bp.route("/ip-scan/export.csv")
+def ip_scan_export():
+    output = io.StringIO(newline="")
+    writer = csv.writer(output, lineterminator="\r\n")
+    writer.writerow(["IP", "MAC", "Manufacturer", "Hostname", "Status"])
+
+    for item in get_scan_status().get("results", []):
+        writer.writerow([
+            _safe_csv_value(item.get("ip")),
+            _safe_csv_value(item.get("mac")),
+            _safe_csv_value(item.get("manufacturer") or "Unknown"),
+            _safe_csv_value(item.get("hostname")),
+            _scan_result_status(item),
+        ])
+
+    filename = f"ip-scan-{datetime.now().strftime('%Y%m%d-%H%M%S')}.csv"
+    return Response(
+        "\ufeff" + output.getvalue(),
+        content_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 @main_bp.route("/ip-scan/monitor/start", methods=["POST"])
 def ip_scan_monitor_start():
