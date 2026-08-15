@@ -1,4 +1,4 @@
-# Network Manager
+# AVNetKit
 
 Current release: **V1.2.0**
 
@@ -50,12 +50,12 @@ with bounded DNS and NetBIOS timeouts. The optional online manufacturer fallback
 is disabled by default; enable it before startup only when required:
 
 ```powershell
-$env:NETWORK_MANAGER_ONLINE_VENDOR_LOOKUP="1"
+$env:AVNETKIT_ONLINE_VENDOR_LOOKUP="1"
 python app.py
 ```
 
 The weekly IEEE update runs in the background and stores its persistent copy in
-`%APPDATA%\Windows NIC Manager\ieee_manufacturers.json`.
+`%APPDATA%\AVNetKit\ieee_manufacturers.json`.
 
 ## Run tests
 
@@ -97,13 +97,13 @@ build.bat
 Or build directly with the current PyInstaller spec:
 
 ```bat
-pyinstaller "Network Manager.spec"
+pyinstaller "AVNetKit.spec"
 ```
 
 Equivalent one-file command:
 
 ```bat
-python -m PyInstaller --onefile --windowed --uac-admin --add-data "templates;templates" --add-data "static;static" --add-data "manufacturer_data;manufacturer_data" --hidden-import win32timezone --icon=NetworkManager.ico --name "NetworkManager" app.py
+python -m PyInstaller --onefile --windowed --uac-admin --add-data "templates;templates" --add-data "static;static" --add-data "manufacturer_data;manufacturer_data" --hidden-import win32timezone --icon=AVNetKit.ico --name "AVNetKit" app.py
 ```
 
 ## Releases and automatic updates
@@ -115,13 +115,10 @@ For this release, build with `APP_VERSION = "1.2.0"` and create a normal
 (non-draft, non-prerelease) GitHub release tagged `V1.2.0`. Attach the built EXE
 using this name:
 
-- `NetworkManager.exe`
-
-The updater also recognizes the legacy `Network.Manager.exe` and
-`Network Manager.exe` asset names.
+- `AVNetKit.exe`
 
 The packaged app checks GitHub once when it starts. A newer semantic version is
 offered in the UI. The downloaded EXE must have the SHA-256 digest supplied by
 GitHub's release API before the running EXE will be replaced and restarted.
 The installer records its source path, target path, retries and errors in
-`%APPDATA%\Windows NIC Manager\update.log`.
+`%APPDATA%\AVNetKit\update.log`.

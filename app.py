@@ -55,7 +55,7 @@ if __name__ == "__main__":
     wait_for_flask()
 
     webview.create_window(
-        "Network Manager",
+        "AVNetKit",
         "http://127.0.0.1:5050",
         width=1500,
         height=950,

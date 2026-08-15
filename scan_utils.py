@@ -420,7 +420,7 @@ def lookup_manufacturer(mac: str, allow_online: Optional[bool] = None) -> str:
         time.sleep(0.35)
 
         url = f"https://api.macvendors.com/{clean_mac}"
-        req = urllib.request.Request(url, headers={"User-Agent": "Network-Manager"})
+        req = urllib.request.Request(url, headers={"User-Agent": "AVNetKit"})
 
         with urllib.request.urlopen(req, timeout=10) as response:
             text = response.read().decode("utf-8", errors="replace").strip()

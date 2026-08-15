@@ -18,24 +18,24 @@ class UpdateTests(unittest.TestCase):
     @patch("update_utils._read_json")
     def test_check_for_update_selects_release_exe(self, read_json):
         read_json.return_value = {
-            "tag_name": "V1.1.0",
-            "name": "Version 1.1.0",
+            "tag_name": "V1.3.0",
+            "name": "Version 1.3.0",
             "html_url": "https://github.com/example/release",
             "published_at": "2026-08-15T10:00:00Z",
-            "assets": [{"name": "NetworkManager.exe"}],
+            "assets": [{"name": "AVNetKit.exe"}],
         }
 
         result = update_utils.check_for_update()
 
         self.assertTrue(result["available"])
         self.assertTrue(result["can_auto_update"])
-        self.assertEqual(result["latest_version"], "1.1.0")
+        self.assertEqual(result["latest_version"], "1.3.0")
         self.assertNotIn("error", result)
 
     @patch("update_utils._read_json")
     def test_check_rejects_release_without_supported_exe(self, read_json):
         read_json.return_value = {
-            "tag_name": "V1.1.0",
+            "tag_name": "V1.3.0",
             "assets": [{"name": "source.zip"}],
         }
 
@@ -47,8 +47,8 @@ class UpdateTests(unittest.TestCase):
     def test_install_helper_waits_for_launcher_and_records_target(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
-            source = temp_path / "download" / "NetworkManager.exe"
-            target = temp_path / "installed" / "NetworkManager.exe"
+            source = temp_path / "download" / "AVNetKit.exe"
+            target = temp_path / "installed" / "AVNetKit.exe"
             source.parent.mkdir()
             target.parent.mkdir()
             source.write_bytes(b"new executable")

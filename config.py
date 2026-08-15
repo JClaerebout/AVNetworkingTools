@@ -3,10 +3,10 @@ import os
 import sys
 
 
-APP_NAME = "Windows NIC Manager"
-SECRET_KEY = os.getenv("NETWORK_MANAGER_SECRET_KEY", "local-network-manager-secret")
+APP_NAME = "AVNetKit"
+SECRET_KEY = os.getenv("AVNETKIT_SECRET_KEY", "local-avnetkit-secret")
 MANUFACTURER_ONLINE_FALLBACK = os.getenv(
-    "NETWORK_MANAGER_ONLINE_VENDOR_LOOKUP", "0"
+    "AVNETKIT_ONLINE_VENDOR_LOOKUP", "0"
 ).strip().lower() in {"1", "true", "yes", "on"}
 
 
@@ -19,7 +19,7 @@ def get_base_dir() -> Path:
     when the app closes. So do not store history next to __file__ in EXE mode.
 
     History will be stored here:
-    C:\\Users\\<user>\\AppData\\Roaming\\Windows NIC Manager\\
+    C:\\Users\\<user>\\AppData\\Roaming\\AVNetKit\\
     """
     appdata = os.getenv("APPDATA")
 
