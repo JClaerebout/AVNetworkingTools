@@ -71,7 +71,11 @@ class UpdateTests(unittest.TestCase):
             self.assertEqual(command[command.index("-AppProcessId") + 1], "1234")
             self.assertEqual(command[command.index("-LauncherProcessId") + 1], "1233")
             self.assertEqual(command[command.index("-Target") + 1], str(target.resolve()))
-            self.assertIn("for ($attempt = 1; $attempt -le 120; $attempt++)", (source.parent / "install-update.ps1").read_text(encoding="utf-8"))
+            helper_script = (source.parent / "install-update.ps1").read_text(encoding="utf-8")
+            self.assertIn("for ($attempt = 1; $attempt -le 120; $attempt++)", helper_script)
+            self.assertIn('Where-Object { $_.Name -like "_PYI_*" }', helper_script)
+            self.assertIn('$env:PYINSTALLER_RESET_ENVIRONMENT = "1"', helper_script)
+            self.assertIn("-WorkingDirectory $workingDirectory", helper_script)
             self.assertIn(str(target.resolve()), (temp_path / "update.log").read_text(encoding="utf-8"))
             timer.assert_called_once()
 

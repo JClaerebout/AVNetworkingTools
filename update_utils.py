@@ -223,8 +223,19 @@ try {
     }
 
     if (-not $installed) { throw "Could not replace the executable after 120 attempts." }
-    Start-Process -FilePath $Target
-    Write-UpdateLog "Update installed successfully and the app was restarted."
+
+    # A PyInstaller one-file child inherits private variables that point to the
+    # old process's temporary _MEI directory. Never pass those stale paths to
+    # the newly installed executable.
+    Get-ChildItem Env: |
+        Where-Object { $_.Name -like "_PYI_*" } |
+        ForEach-Object { Remove-Item -LiteralPath "Env:$($_.Name)" -ErrorAction SilentlyContinue }
+    Remove-Item -LiteralPath "Env:_MEIPASS2" -ErrorAction SilentlyContinue
+    $env:PYINSTALLER_RESET_ENVIRONMENT = "1"
+
+    $workingDirectory = Split-Path -Parent $Target
+    $newProcess = Start-Process -FilePath $Target -WorkingDirectory $workingDirectory -PassThru
+    Write-UpdateLog "Update installed. Restart launched with PID=$($newProcess.Id) and a clean PyInstaller environment."
     Remove-Item -LiteralPath $Source -Force -ErrorAction SilentlyContinue
 } catch {
     Write-UpdateLog "Update installation failed: $($_.Exception.Message)"
