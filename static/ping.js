@@ -5,6 +5,7 @@
     const historySelect = document.getElementById("pingHistory");
     const startButton = document.getElementById("startPing");
     const stopButton = document.getElementById("stopPing");
+    const downloadButton = document.getElementById("downloadPingTxt");
     const stateLabel = document.getElementById("pingState");
     const output = document.getElementById("pingOutput");
 
@@ -37,6 +38,7 @@
         stateLabel.textContent = data.running ? `Running: ${data.target}` : "Stopped";
         startButton.disabled = data.running;
         stopButton.disabled = !data.running;
+        downloadButton.disabled = !data.output || data.output.length === 0;
         setOutput(data.output);
         updateHistory(data.history);
     }
@@ -64,6 +66,9 @@
 
     startButton.addEventListener("click", startPing);
     stopButton.addEventListener("click", stopPing);
+    downloadButton.addEventListener("click", () => {
+        window.location.href = urls.exportUrl;
+    });
 
     refreshStatus();
     setInterval(refreshStatus, 1000);

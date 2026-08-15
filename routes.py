@@ -134,6 +134,22 @@ def ping_status():
     return jsonify(get_ping_status())
 
 
+@main_bp.route("/ping/export.txt")
+def ping_export():
+    lines = get_ping_status().get("output", [])
+    safe_lines = [str(line).replace("\r\n", "\n").replace("\r", "\n") for line in lines]
+    content = "\r\n".join(safe_lines) if safe_lines else "No ping output available."
+    filename = f"ping-result-{datetime.now().strftime('%Y%m%d-%H%M%S')}.txt"
+    return Response(
+        content + "\r\n",
+        content_type="text/plain; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
 @main_bp.route("/command-line")
 def command_line_page():
     return render_template("command_line.html", working_directory=str(Path.cwd()))
