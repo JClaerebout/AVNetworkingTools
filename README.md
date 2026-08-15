@@ -2,9 +2,8 @@
 
 Current release: **V1.2.0**
 
-Windows desktop network utility for configuring adapters, discovering devices,
-monitoring network availability, testing connections, and inspecting Wi-Fi
-channel usage.
+AVNetKit — Network tools for AV commissioning
+A Windows toolbox designed for AV integrators and programmers to quickly configure network adapters, discover devices, test connections and troubleshoot systems during commissioning.
 
 ## Features
 
