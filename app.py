@@ -58,7 +58,7 @@ if __name__ == "__main__":
     wait_for_flask()
 
     webview.create_window(
-        "AVNetKit",
+        "AVNetworkingTools",
         f"http://127.0.0.1:{DEFAULT_PORT}",
         width=1500,
         height=950,

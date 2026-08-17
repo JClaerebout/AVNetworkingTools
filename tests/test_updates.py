@@ -22,7 +22,7 @@ class UpdateTests(unittest.TestCase):
             "name": "Version 1.3.0",
             "html_url": "https://github.com/example/release",
             "published_at": "2026-08-15T10:00:00Z",
-            "assets": [{"name": "AVNetKit.exe"}],
+            "assets": [{"name": "AVNetworkingTools.exe"}],
         }
 
         result = update_utils.check_for_update()
@@ -47,8 +47,8 @@ class UpdateTests(unittest.TestCase):
     def test_install_helper_waits_for_launcher_and_records_target(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
-            source = temp_path / "download" / "AVNetKit.exe"
-            target = temp_path / "installed" / "AVNetKit.exe"
+            source = temp_path / "download" / "AVNetworkingTools.exe"
+            target = temp_path / "installed" / "AVNetworkingTools.exe"
             source.parent.mkdir()
             target.parent.mkdir()
             source.write_bytes(b"new executable")

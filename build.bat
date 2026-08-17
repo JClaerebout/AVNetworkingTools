@@ -24,8 +24,8 @@ if errorlevel 1 (
 )
 
 echo.
-echo Building AVNetKit V%APP_RELEASE_VERSION%...
-python -m PyInstaller "AVNetKit.spec" --noconfirm
+echo Building AVNetworkingTools V%APP_RELEASE_VERSION%...
+python -m PyInstaller "AVNetworkingTools.spec" --noconfirm
 if errorlevel 1 (
     echo.
     echo Build failed.
@@ -33,4 +33,4 @@ if errorlevel 1 (
 )
 
 echo.
-echo Build complete: dist\AVNetKit.exe ^(V%APP_RELEASE_VERSION%^)
+echo Build complete: dist\AVNetworkingTools.exe ^(V%APP_RELEASE_VERSION%^)

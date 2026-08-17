@@ -22,7 +22,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='AVNetKit',
+    name='AVNetworkingTools',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -36,5 +36,5 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     uac_admin=True,
-    icon=['AVNetKit.ico'],
+    icon=['AVNetworkingTools.ico'],
 )

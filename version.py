@@ -1,2 +1,2 @@
 APP_VERSION = "1.2.0"
-GITHUB_REPOSITORY = "JClaerebout/AVNetKit"
+GITHUB_REPOSITORY = "JClaerebout/AVNetworkingTools"

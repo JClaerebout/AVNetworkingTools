@@ -1,16 +1,16 @@
-# AVNetKit
+# AVNetworkingTools
 
 Current release: **V1.2.0**
 
-AVNetKit — Network tools for AV commissioning.
+AVNetworkingTools — Network tools for AV commissioning.
 A Windows toolbox for AV integrators and programmers to quickly configure network adapters, discover devices, test connections and troubleshoot systems during commissioning.
 
 ## Quick start
 
 For a normal user, the workflow is simple:
 
-1. Download the latest `AVNetKit.exe` from the GitHub release.
-2. Place it in a logical folder such as `C:\Tools\AVNetKit` or a project folder you can find easily.
+1. Download the latest `AVNetworkingTools.exe` from the GitHub release.
+2. Place it in a logical folder such as `C:\Tools\AVNetworkingTools` or a project folder you can find easily.
 3. Double-click the EXE to launch it.
 4. If Windows asks for elevation, allow it so the app can manage adapters and network diagnostics.
 
@@ -42,11 +42,11 @@ The application opens its own desktop window and runs locally at `http://127.0.0
 Manufacturer names come from `manufacturer_data/ieee_manufacturers.json` and normally require no per-device internet request. Hostname lookup runs separately with bounded DNS and NetBIOS timeouts. The optional online manufacturer fallback is disabled by default; enable it before startup only when required:
 
 ```powershell
-$env:AVNETKIT_ONLINE_VENDOR_LOOKUP="1"
-AVNetKit.exe
+$env:AVNETWORKINGTOOLS_ONLINE_VENDOR_LOOKUP="1"
+AVNetworkingTools.exe
 ```
 
-The weekly IEEE update runs in the background and stores its persistent copy in `%APPDATA%\AVNetKit\ieee_manufacturers.json`.
+The weekly IEEE update runs in the background and stores its persistent copy in `%APPDATA%\AVNetworkingTools\ieee_manufacturers.json`.
 
 ---
 
@@ -103,13 +103,13 @@ build.bat
 Or build directly with the current PyInstaller spec:
 
 ```bat
-pyinstaller "AVNetKit.spec"
+pyinstaller "AVNetworkingTools.spec"
 ```
 
 Equivalent one-file command:
 
 ```bat
-python -m PyInstaller --onefile --windowed --uac-admin --add-data "templates;templates" --add-data "static;static" --add-data "manufacturer_data;manufacturer_data" --hidden-import win32timezone --icon=AVNetKit.ico --name "AVNetKit" app.py
+python -m PyInstaller --onefile --windowed --uac-admin --add-data "templates;templates" --add-data "static;static" --add-data "manufacturer_data;manufacturer_data" --hidden-import win32timezone --icon=AVNetworkingTools.ico --name "AVNetworkingTools" app.py
 ```
 
 ### Releases and automatic updates
@@ -118,6 +118,6 @@ The current application version is defined once in `version.py` and is displayed
 
 For this release, build with `APP_VERSION = "1.2.0"` and create a normal (non-draft, non-prerelease) GitHub release tagged `V1.2.0`. Attach the built EXE using this name:
 
-- `AVNetKit.exe`
+- `AVNetworkingTools.exe`
 
-The packaged app checks GitHub once when it starts. A newer semantic version is offered in the UI. The downloaded EXE must have the SHA-256 digest supplied by GitHub's release API before the running EXE will be replaced and restarted. The installer records its source path, target path, retries and errors in `%APPDATA%\AVNetKit\update.log`.
+The packaged app checks GitHub once when it starts. A newer semantic version is offered in the UI. The downloaded EXE must have the SHA-256 digest supplied by GitHub's release API before the running EXE will be replaced and restarted. The installer records its source path, target path, retries and errors in `%APPDATA%\AVNetworkingTools\update.log`.

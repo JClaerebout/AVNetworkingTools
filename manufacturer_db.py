@@ -104,7 +104,7 @@ def lookup_local_manufacturer(mac: str) -> str:
 
 
 def _download_csv(url: str) -> str:
-    request = urllib.request.Request(url, headers={"User-Agent": "AVNetKit/1.0"})
+    request = urllib.request.Request(url, headers={"User-Agent": "AVNetworkingTools/1.0"})
     with urllib.request.urlopen(request, timeout=30) as response:
         return response.read().decode("utf-8-sig", errors="strict")
 

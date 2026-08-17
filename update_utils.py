@@ -16,9 +16,9 @@ from version import APP_VERSION, GITHUB_REPOSITORY
 
 
 LATEST_RELEASE_URL = f"https://api.github.com/repos/{GITHUB_REPOSITORY}/releases/latest"
-USER_AGENT = f"AVNetKit/{APP_VERSION}"
+USER_AGENT = f"AVNetworkingTools/{APP_VERSION}"
 MAX_DOWNLOAD_BYTES = 500 * 1024 * 1024
-_ASSET_NAMES = {"avnetkit.exe"}
+_ASSET_NAMES = {"avnetworkingtools.exe"}
 _state_lock = threading.Lock()
 _update_state = {
     "status": "idle",
@@ -86,7 +86,7 @@ def check_for_update():
     }
 
     if available and asset is None:
-        result["error"] = "The latest release does not contain exactly one supported AVNetKit EXE asset."
+        result["error"] = "The latest release does not contain exactly one supported AVNetworkingTools EXE asset."
     return result
 
 
@@ -117,10 +117,10 @@ def _download_latest_release():
         if not re.fullmatch(r"sha256:[0-9a-fA-F]{64}", digest):
             raise RuntimeError("The release asset has no valid SHA-256 digest; update cancelled.")
 
-        update_dir = Path(tempfile.gettempdir()) / "AVNetKitUpdate" / tag
+        update_dir = Path(tempfile.gettempdir()) / "AVNetworkingToolsUpdate" / tag
         update_dir.mkdir(parents=True, exist_ok=True)
-        destination = update_dir / "AVNetKit.exe"
-        partial = update_dir / "AVNetKit.exe.part"
+        destination = update_dir / "AVNetworkingTools.exe"
+        partial = update_dir / "AVNetworkingTools.exe.part"
         request = Request(download_url, headers={"User-Agent": USER_AGENT})
         hasher = hashlib.sha256()
         downloaded = 0

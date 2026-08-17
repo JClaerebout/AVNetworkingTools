@@ -3,10 +3,10 @@ import os
 import sys
 
 
-APP_NAME = "AVNetKit"
-SECRET_KEY = os.getenv("AVNETKIT_SECRET_KEY", "local-avnetkit-secret")
+APP_NAME = "AVNetworkingTools"
+SECRET_KEY = os.getenv("AVNETWORKINGTOOLS_SECRET_KEY", "local-avnetworkingtools-secret")
 MANUFACTURER_ONLINE_FALLBACK = os.getenv(
-    "AVNETKIT_ONLINE_VENDOR_LOOKUP", "0"
+    "AVNETWORKINGTOOLS_ONLINE_VENDOR_LOOKUP", "0"
 ).strip().lower() in {"1", "true", "yes", "on"}
 
 
@@ -19,7 +19,7 @@ def get_base_dir() -> Path:
     when the app closes. So do not store history next to __file__ in EXE mode.
 
     History will be stored here:
-    C:\\Users\\<user>\\AppData\\Roaming\\AVNetKit\\
+    C:\\Users\\<user>\\AppData\\Roaming\\AVNetworkingTools\\
     """
     appdata = os.getenv("APPDATA")
 
