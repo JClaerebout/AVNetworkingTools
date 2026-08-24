@@ -11,28 +11,34 @@
             color: #e8e8e8;
         }
     </style>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=web-column-layout-5">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=high-dpi-compact-4">
 </head>
 <body>
 <header>
-    <div>
-        <h1>AVNetworkingTools <span class="app-version">v{{ app_version }}</span></h1>
-        <div class="hint">{% block subtitle %}View and change IP, subnet, gateway, DNS, static/DHCP per adapter.{% endblock %}</div>
+    <div class="header-inner">
+        <div class="header-copy">
+            <h1>AVNetworkingTools <span class="app-version">v{{ app_version }}</span></h1>
+            <div class="hint">{% block subtitle %}View and change IP, subnet, gateway, DNS, static/DHCP per adapter.{% endblock %}</div>
+        </div>
+        <nav class="header-actions">
+            {% block header_actions %}{% endblock %}
+            <a class="btn secondary" href="{{ url_for('main.index') }}">NICs</a>
+            <a class="btn secondary" href="{{ url_for('main.ping_page') }}">Ping</a>
+            <a class="btn secondary" href="{{ url_for('main.ip_scan_page') }}">IP Scan</a>
+            <a class="btn secondary" href="{{ url_for('main.connection_test_page') }}">Connect</a>
+            <a class="btn secondary" href="{{ url_for('main.command_line_page') }}">Cmd</a>
+            <a class="btn secondary" href="{{ url_for('main.wifi_scan_page') }}">WiFi Scan</a>
+        </nav>
     </div>
-    <nav class="header-actions">
-        {% block header_actions %}{% endblock %}
-        <a class="btn secondary" href="{{ url_for('main.index') }}">NICs</a>
-        <a class="btn secondary" href="{{ url_for('main.ping_page') }}">Ping</a>
-        <a class="btn secondary" href="{{ url_for('main.ip_scan_page') }}">IP Scan</a>
-        <a class="btn secondary" href="{{ url_for('main.connection_test_page') }}">Connect</a>
-        <a class="btn secondary" href="{{ url_for('main.command_line_page') }}">Cmd</a>
-        <a class="btn secondary" href="{{ url_for('main.wifi_scan_page') }}">WiFi Scan</a>
-    </nav>
 </header>
 
-<main class="container">
-    {% block content %}{% endblock %}
+<main class="content-scroll">
+    <div class="container">
+        {% block content %}{% endblock %}
+    </div>
 </main>
+
+<datalist id="lastScanIpSuggestions"></datalist>
 
 <div id="updateDialog" class="update-dialog" role="dialog" aria-modal="true" aria-labelledby="updateTitle" hidden>
     <div class="update-dialog-card">
@@ -49,7 +55,10 @@
     </div>
 </div>
 
-<script src="{{ url_for('static', filename='app.js') }}?v=page-field-state-5"></script>
+<script
+    src="{{ url_for('static', filename='app.js') }}?v=ip-suggestions-6"
+    data-ip-scan-status-url="{{ url_for('main.ip_scan_status') }}"
+></script>
 <script src="{{ url_for('static', filename='updater.js') }}?v=1"></script>
 {% block scripts %}{% endblock %}
 </body>

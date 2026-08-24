@@ -1,3 +1,41 @@
+// Offer devices from the most recent IP scan without restricting manual IP entry.
+(function enableLastScanIpSuggestions() {
+    const inputs = document.querySelectorAll('[data-ip-suggestions]');
+    const suggestions = document.getElementById('lastScanIpSuggestions');
+    const statusUrl = document.currentScript?.dataset.ipScanStatusUrl;
+
+    if (!inputs.length || !suggestions || !statusUrl) return;
+
+    inputs.forEach(input => input.setAttribute('list', suggestions.id));
+
+    fetch(statusUrl, {headers: {'Accept': 'application/json'}})
+        .then(response => {
+            if (!response.ok) throw new Error('Could not load IP scan results.');
+            return response.json();
+        })
+        .then(data => {
+            const seen = new Set();
+            const results = Array.isArray(data.results) ? data.results : [];
+
+            results.forEach(result => {
+                const ip = String(result?.ip || '').trim();
+                if (!ip || seen.has(ip)) return;
+
+                seen.add(ip);
+                const option = document.createElement('option');
+                option.value = ip;
+                option.label = [result.hostname, result.manufacturer]
+                    .map(value => String(value || '').trim())
+                    .filter(value => value && value.toLowerCase() !== 'unknown')
+                    .join(' - ');
+                suggestions.appendChild(option);
+            });
+        })
+        .catch(() => {
+            // Inputs remain ordinary free-text fields if scan suggestions are unavailable.
+        });
+})();
+
 // Keep unfinished field values when navigating between tool pages in this tab.
 (function preservePageFields() {
     const storageKey = `avNetworkingTools:page-fields:${window.location.pathname}`;

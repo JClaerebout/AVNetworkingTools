@@ -1,31 +1,32 @@
 {% extends "base.html" %}
 
-{% block header_actions %}
-<label class="auto-refresh-box">
-    <input id="autoRefresh" type="checkbox">
-    Auto refresh
-</label>
-<a class="btn secondary" href="{{ url_for('main.index') }}">Refresh</a>
-<label> | </label>
-{% endblock %}
-
 {% block content %}
+    <div class="nic-page-toolbar">
+        <div class="nic-refresh-controls">
+            <label class="auto-refresh-box">
+                <input id="autoRefresh" type="checkbox">
+                Auto refresh
+            </label>
+            <a class="btn secondary" href="{{ url_for('main.index') }}">Refresh</a>
+        </div>
+
+        <div class="notification-area">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="flash {{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+            <div id="operationNotice" class="flash info" role="status" hidden></div>
+        </div>
+    </div>
+
     {% if admin %}
     <!--<div class="top-note ok-note">Running with Administrator rights.</div>-->
     {% else %}
     <div class="top-note">Not running as Administrator. Windows will block IP changes without elevated rights.</div>
     {% endif %}
-
-    <div class="notification-area">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="flash {{ category }}">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-        <div id="operationNotice" class="flash info" role="status" hidden></div>
-    </div>
 
     <div class="grid">
         {% for nic in nics %}
@@ -78,7 +79,7 @@
                 <div class="row static-fields">
                     <div>
                         <label>IP address</label>
-                        <input name="ip" value="{{ nic.ip }}" placeholder="192.168.1.50">
+                        <input name="ip" data-ip-suggestions value="{{ nic.ip }}" placeholder="192.168.1.50">
                     </div>
                     <div>
                         <label>Subnet mask</label>
@@ -89,11 +90,11 @@
                 <div class="row static-fields">
                     <div>
                         <label>Gateway</label>
-                        <input name="gateway" value="{{ nic.gateway }}" placeholder="192.168.1.1">
+                        <input name="gateway" data-ip-suggestions value="{{ nic.gateway }}" placeholder="192.168.1.1">
                     </div>
                     <div>
                         <label>DNS servers</label>
-                        <input name="dns" value="{{ nic.dns | join(', ') }}" placeholder="1.1.1.1, 8.8.8.8">
+                        <input name="dns" data-ip-suggestions value="{{ nic.dns | join(', ') }}" placeholder="1.1.1.1, 8.8.8.8">
                     </div>
                 </div>
 
