@@ -6,10 +6,23 @@
     const startButton = document.getElementById("startPing");
     const stopButton = document.getElementById("stopPing");
     const downloadButton = document.getElementById("downloadPingTxt");
+    const exportStatus = document.getElementById("pingExportStatus");
     const stateLabel = document.getElementById("pingState");
     const output = document.getElementById("pingOutput");
 
     if (!ipInput) return;
+
+    let exportStatusTimer = null;
+
+    function showExportSuccess() {
+        clearTimeout(exportStatusTimer);
+        exportStatus.textContent = "Saved to Downloads.";
+        exportStatus.classList.add("success");
+        exportStatusTimer = setTimeout(() => {
+            exportStatus.textContent = "";
+            exportStatus.classList.remove("success");
+        }, 4000);
+    }
 
     historySelect.addEventListener("change", () => {
         if (historySelect.value) {
@@ -64,11 +77,26 @@
         renderStatus(await response.json());
     }
 
+    async function savePingTxt() {
+        downloadButton.disabled = true;
+        try {
+            const response = await fetch(urls.exportUrl, {method: "POST"});
+            const data = await response.json();
+            if (!response.ok || !data.success) {
+                alert(data.message || "Could not save TXT.");
+                return;
+            }
+            showExportSuccess();
+        } catch (error) {
+            alert(`Could not save TXT: ${error.message}`);
+        } finally {
+            downloadButton.disabled = false;
+        }
+    }
+
     startButton.addEventListener("click", startPing);
     stopButton.addEventListener("click", stopPing);
-    downloadButton.addEventListener("click", () => {
-        window.location.href = urls.exportUrl;
-    });
+    downloadButton.addEventListener("click", savePingTxt);
 
     refreshStatus();
     setInterval(refreshStatus, 1000);

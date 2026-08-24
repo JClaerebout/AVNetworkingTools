@@ -58,7 +58,9 @@
     <div class="results-header-row">
         <h2>Results</h2>
         <div class="actions">
+            <span id="scanExportStatus" class="export-status" role="status" aria-live="polite"></span>
             <button id="downloadScanCsv" class="btn secondary" type="button" disabled>Download CSV</button>
+            <button id="downloadMonitorLog" class="btn secondary" type="button" disabled>Download Monitor Log</button>
             <label id="monitorBox" class="auto-refresh-box" style="display:none;">
                 <input id="monitorScan" type="checkbox">
                 Monitor
@@ -78,6 +80,7 @@
         <table class="result-table">
             <thead>
                 <tr>
+                    <th class="web-column" title="Web interface available"><span role="img" aria-label="Web">&#127760;</span></th>
                     <th>IP</th>
                     <th>MAC</th>
                     <th>Manufacturer</th>
@@ -86,12 +89,13 @@
                 </tr>
             </thead>
             <tbody id="scanResults">
-                <tr><td colspan="5" class="muted-cell">No scan results yet.</td></tr>
+                <tr><td colspan="6" class="muted-cell">No scan results yet.</td></tr>
             </tbody>
         </table>
     </div>
 </div>
 <div id="scanContextMenu" class="context-menu">
+    <button id="openWebpageButton" type="button" style="display:none;">Open webpage</button>
     <button id="copyIpButton" type="button">Copy IP</button>
     <button id="copyMacButton" type="button">Copy MAC</button>
 </div>
@@ -99,8 +103,9 @@
 
 {% block scripts %}
 <script
-    src="{{ url_for('static', filename='ip_scan.js') }}?v=lookup-details-1"
+    src="{{ url_for('static', filename='ip_scan.js') }}?v=monitor-log-1"
     data-status-url="{{ url_for('main.ip_scan_status') }}"
+    data-open-web-url="{{ url_for('main.ip_scan_open_web') }}"
     data-export-url="{{ url_for('main.ip_scan_export') }}"
     data-start-url="{{ url_for('main.ip_scan_start') }}"
     data-lookup-url="{{ url_for('main.ip_scan_lookup') }}"
@@ -108,5 +113,6 @@
     data-monitor-start-url="{{ url_for('main.ip_scan_monitor_start') }}"
     data-monitor-stop-url="{{ url_for('main.ip_scan_monitor_stop') }}"
     data-monitor-pause-url="{{ url_for('main.ip_scan_monitor_pause') }}"
+    data-monitor-export-url="{{ url_for('main.ip_scan_monitor_export') }}"
 ></script>
 {% endblock %}

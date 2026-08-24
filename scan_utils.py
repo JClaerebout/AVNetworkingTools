@@ -6,6 +6,7 @@ import threading
 import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
 from typing import Dict, List, Optional
 
 from config import MANUFACTURER_ONLINE_FALLBACK
@@ -16,6 +17,7 @@ from system_utils import run_cmd
 _MAX_HOSTS = 1024
 _SCAN_PING_RETRIES = 2
 _MONITOR_MISSING_AFTER = 3
+_WEB_PORT_TIMEOUT = 0.4
 
 _scan_lock = threading.Lock()
 _scan_thread: Optional[threading.Thread] = None
@@ -43,6 +45,7 @@ _lookup_total = 0
 _lookup_done = 0
 _large_scan_quick_only = False
 _scan_results: List[Dict] = []
+_monitor_log: List[str] = []
 _vendor_cache = {}
 _vendor_lock = threading.Lock()
 
@@ -185,11 +188,32 @@ def lookup_hostname(ip: str) -> str:
 
     return ""
 
+
+def probe_web_services(ip: str, source_ip: str = "") -> List[str]:
+    services = []
+
+    for scheme, port in (("http", 80), ("https", 443)):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as connection:
+                connection.settimeout(_WEB_PORT_TIMEOUT)
+                if source_ip:
+                    connection.bind((source_ip, 0))
+                connection.connect((ip, port))
+            services.append(scheme)
+        except OSError:
+            pass
+
+    return services
+
 def _lookup_new_monitor_device(ip: str, mac: str) -> None:
     hostname = lookup_hostname(ip)
+    with _scan_lock:
+        source_ip = _last_scan_context.get("source_ip", "")
+    web_services = probe_web_services(ip, source_ip)
 
     _update_result(ip, {
-        "hostname": hostname
+        "hostname": hostname,
+        "web_services": web_services,
     })
 
     manufacturer = lookup_manufacturer(mac)
@@ -200,6 +224,15 @@ def _lookup_new_monitor_device(ip: str, mac: str) -> None:
     })
 
 
+def _append_monitor_log_locked(message: str) -> None:
+    _monitor_log.append(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}")
+
+
+def get_monitor_log() -> List[str]:
+    with _scan_lock:
+        return list(_monitor_log)
+
+
 def _monitor_update_device(ip: str, mac: str, quick_scan: bool) -> bool:
     """
     Returns True when this is a newly discovered IP.
@@ -207,6 +240,8 @@ def _monitor_update_device(ip: str, mac: str, quick_scan: bool) -> bool:
     with _scan_lock:
         for result in _scan_results:
             if result["ip"] == ip:
+                was_missing = bool(result.get("missing"))
+                was_duplicate = bool(result.get("duplicate_ip"))
                 seen_macs = set(result.get("seen_macs", []))
 
                 current_mac = result.get("mac", "")
@@ -227,6 +262,13 @@ def _monitor_update_device(ip: str, mac: str, quick_scan: bool) -> bool:
                 else:
                     result["mac"] = mac
 
+                if was_missing:
+                    _append_monitor_log_locked(f"RESTORED {ip} ({mac or 'MAC unknown'})")
+                if result["duplicate_ip"] and not was_duplicate:
+                    _append_monitor_log_locked(
+                        f"DUPLICATE IP {ip}: {', '.join(result['duplicate_macs'])}"
+                    )
+
                 return False
 
         _scan_results.append({
@@ -240,9 +282,11 @@ def _monitor_update_device(ip: str, mac: str, quick_scan: bool) -> bool:
             "duplicate_macs": [],
             "seen_macs": [mac] if mac else [],
             "is_local": False,
+            "web_services": [],
         })
 
         _scan_results.sort(key=lambda x: ipaddress.ip_address(x["ip"]))
+        _append_monitor_log_locked(f"NEW DEVICE {ip} ({mac or 'MAC unknown'})")
         return True
 
 
@@ -326,8 +370,13 @@ def _monitor_worker() -> None:
                     result["miss_count"] = 0
                     result["missing"] = False
                 else:
+                    was_missing = bool(result.get("missing"))
                     result["miss_count"] = int(result.get("miss_count", 0)) + 1
                     result["missing"] = result["miss_count"] >= _MONITOR_MISSING_AFTER
+                    if result["missing"] and not was_missing:
+                        _append_monitor_log_locked(
+                            f"MISSING {ip} ({result.get('mac') or 'MAC unknown'})"
+                        )
 
             missing_count = len([r for r in _scan_results if r.get("missing")])
             duplicate_count = len([r for r in _scan_results if r.get("duplicate_ip")])
@@ -348,10 +397,11 @@ def _monitor_worker() -> None:
         _monitor_running = False
         _monitor_paused = False
         _scan_message = "Monitoring stopped."
+        _append_monitor_log_locked("Monitoring stopped.")
 
 
 def start_monitor() -> tuple[bool, str]:
-    global _monitor_thread, _monitor_running
+    global _monitor_thread, _monitor_running, _monitor_log
 
     with _scan_lock:
         if _scan_running or _lookup_running:
@@ -367,6 +417,12 @@ def start_monitor() -> tuple[bool, str]:
             return True, "Monitoring is already active."
 
         _monitor_stop.clear()
+        _monitor_running = True
+        _monitor_log = []
+        _append_monitor_log_locked(
+            f"Monitoring started on {_last_scan_context['network']} with "
+            f"{len(_scan_results)} known device(s)."
+        )
 
     _monitor_thread = threading.Thread(target=_monitor_worker, daemon=True)
     _monitor_thread.start()
@@ -390,7 +446,9 @@ def set_monitor_paused(paused: bool) -> tuple[bool, str]:
         if not _monitor_running:
             return True, "Monitoring is not active."
 
-        _monitor_paused = paused
+        if _monitor_paused != paused:
+            _monitor_paused = paused
+            _append_monitor_log_locked("Monitoring paused." if paused else "Monitoring resumed.")
 
     return True, "Monitoring paused." if paused else "Monitoring resumed."
 
@@ -468,7 +526,8 @@ def _lookup_worker(reused_quick_scan: bool = False) -> None:
     global _lookup_running, _lookup_total, _lookup_done, _scan_message
 
     with _scan_lock:
-        items = [item for item in _scan_results if not item.get("is_local")]
+        items = list(_scan_results)
+        source_ip = _last_scan_context.get("source_ip", "")
         _lookup_total = len(items)
         _lookup_done = 0
         _lookup_running = bool(items)
@@ -488,18 +547,29 @@ def _lookup_worker(reused_quick_scan: bool = False) -> None:
 
     # Local database lookups complete before any potentially slow hostname work.
     for item in items:
+        if item.get("is_local"):
+            continue
         manufacturer = lookup_manufacturer(item.get("mac", ""), allow_online=False)
         _update_result(item.get("ip", ""), {"manufacturer": manufacturer})
 
     with _scan_lock:
-        _scan_message = f"Local manufacturers loaded. Looking up hostnames for {len(items)} device(s)..."
+        _scan_message = f"Local manufacturers loaded. Looking up hostnames and web ports for {len(items)} device(s)..."
 
     def lookup_item(item: Dict) -> None:
+        global _lookup_done
+
         if _scan_stop.is_set():
             return
 
         ip = item.get("ip", "")
         mac = item.get("mac", "")
+        web_services = probe_web_services(ip, source_ip)
+
+        if item.get("is_local"):
+            _update_result(ip, {"web_services": web_services})
+            with _scan_lock:
+                _lookup_done += 1
+            return
 
         hostname = lookup_hostname(ip)
 
@@ -507,7 +577,8 @@ def _lookup_worker(reused_quick_scan: bool = False) -> None:
             return
 
         _update_result(ip, {
-            "hostname": hostname
+            "hostname": hostname,
+            "web_services": web_services,
         })
 
         if MANUFACTURER_ONLINE_FALLBACK and item.get("manufacturer") == "Unknown":
@@ -515,7 +586,6 @@ def _lookup_worker(reused_quick_scan: bool = False) -> None:
             if not _scan_stop.is_set():
                 _update_result(ip, {"manufacturer": manufacturer})
 
-        global _lookup_done
         with _scan_lock:
             _lookup_done += 1
 
@@ -610,6 +680,7 @@ def _scan_worker(interface_name: str, custom_subnet: str = "", quick_scan: bool 
             "duplicate_macs": [],
             "seen_macs": [source_mac] if source_mac else [],
             "is_local": True,
+            "web_services": [],
         })
 
     workers = min(100, max(8, len(hosts)))
@@ -650,6 +721,7 @@ def _scan_worker(interface_name: str, custom_subnet: str = "", quick_scan: bool 
                         "duplicate_ip": False,
                         "duplicate_macs": [],
                         "seen_macs": [mac] if mac else [],
+                        "web_services": [],
                     })
 
     with _scan_lock:
@@ -673,7 +745,7 @@ def _scan_worker(interface_name: str, custom_subnet: str = "", quick_scan: bool 
 def start_scan(interface_name: str, custom_subnet: str = "", quick_scan: bool = False) -> tuple[bool, str]:
     global _scan_thread, _scan_running, _lookup_running, _monitor_running, _monitor_paused
     global _scan_message, _scan_total, _scan_done, _lookup_total, _lookup_done
-    global _large_scan_quick_only, _scan_results
+    global _large_scan_quick_only, _scan_results, _monitor_log
 
     interface_name = interface_name.strip()
     custom_subnet = custom_subnet.strip()
@@ -698,6 +770,7 @@ def start_scan(interface_name: str, custom_subnet: str = "", quick_scan: bool = 
         _monitor_running = False
         _monitor_paused = False
         _scan_results = []
+        _monitor_log = []
 
     _scan_thread = threading.Thread(
         target=_scan_worker,
@@ -782,6 +855,7 @@ def get_scan_status() -> Dict:
             "lookup_running": _lookup_running,
             "monitor_running": _monitor_running,
             "monitor_paused": _monitor_paused,
+            "monitor_log_available": bool(_monitor_log),
             "large_scan_quick_only": _large_scan_quick_only,
             "can_lookup": can_lookup,
             "message": _scan_message,

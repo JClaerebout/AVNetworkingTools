@@ -1,3 +1,90 @@
+// Keep unfinished field values when navigating between tool pages in this tab.
+(function preservePageFields() {
+    const storageKey = `avNetworkingTools:page-fields:${window.location.pathname}`;
+    const fieldSelector = 'input:not([type="hidden"]):not([type="file"]):not([type="button"]):not([type="submit"]), select, textarea';
+    let savedFields = {};
+
+    try {
+        savedFields = JSON.parse(sessionStorage.getItem(storageKey) || '{}');
+    } catch (_error) {
+        savedFields = {};
+    }
+
+    function fieldKey(field) {
+        if (field.id) return `id:${field.id}`;
+
+        const form = field.closest('form');
+        const formIdentity = form
+            ? form.id || form.querySelector('[name="interface"]')?.value || Array.from(document.forms).indexOf(form)
+            : 'page';
+        const fieldIdentity = field.name || Array.from(field.classList).join('.') || field.tagName.toLowerCase();
+        const matchingFields = Array.from(document.querySelectorAll(fieldSelector))
+            .filter(candidate => {
+                const candidateForm = candidate.closest('form');
+                const candidateFormIdentity = candidateForm
+                    ? candidateForm.id || candidateForm.querySelector('[name="interface"]')?.value || Array.from(document.forms).indexOf(candidateForm)
+                    : 'page';
+                const candidateIdentity = candidate.name || Array.from(candidate.classList).join('.') || candidate.tagName.toLowerCase();
+                return candidateFormIdentity === formIdentity && candidateIdentity === fieldIdentity;
+            });
+
+        return `field:${formIdentity}:${fieldIdentity}:${matchingFields.indexOf(field)}`;
+    }
+
+    function fieldState(field) {
+        if (field.type === 'checkbox' || field.type === 'radio') {
+            return {checked: field.checked};
+        }
+        return {value: field.value};
+    }
+
+    function restoreField(field) {
+        const state = savedFields[fieldKey(field)];
+        if (!state) return;
+
+        if (field.type === 'checkbox' || field.type === 'radio') {
+            field.checked = !!state.checked;
+            return;
+        }
+
+        if (field.tagName === 'SELECT' && !Array.from(field.options).some(option => option.value === state.value)) {
+            return;
+        }
+        field.value = state.value;
+    }
+
+    function saveAllFields() {
+        const state = {};
+        document.querySelectorAll(fieldSelector).forEach(field => {
+            state[fieldKey(field)] = fieldState(field);
+        });
+
+        try {
+            sessionStorage.setItem(storageKey, JSON.stringify(state));
+            savedFields = state;
+        } catch (_error) {
+            // The page remains usable when browser storage is unavailable.
+        }
+    }
+
+    document.querySelectorAll(fieldSelector).forEach(restoreField);
+
+    document.addEventListener('input', event => {
+        if (event.target.matches?.(fieldSelector)) saveAllFields();
+    });
+    document.addEventListener('change', event => {
+        if (event.target.matches?.(fieldSelector)) saveAllFields();
+    });
+    window.addEventListener('pagehide', saveAllFields);
+
+    // Some selects, such as connection history and COM ports, receive options asynchronously.
+    new MutationObserver(mutations => {
+        mutations.forEach(mutation => {
+            if (mutation.target instanceof HTMLSelectElement) restoreField(mutation.target);
+        });
+    }).observe(document.body, {childList: true, subtree: true});
+})();
+
 function updateStaticVisibility(form) {
     const mode = form.querySelector('.mode-select').value;
     const staticFields = form.querySelectorAll('.static-fields');

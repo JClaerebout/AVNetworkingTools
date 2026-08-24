@@ -112,9 +112,10 @@
 
     <div id="sendRows" class="send-rows">
         <div class="send-row">
+            <button class="send-drag-handle" type="button" draggable="true" aria-label="Drag to reorder command" title="Drag to reorder">&#9776;</button>
             <input class="send-input" placeholder="Example: power on or \x50\x4F\x57\x0D">
             <button class="btn send-button" type="button">Send</button>
-            <button class="btn secondary remove-send-row" type="button" style="display:none;">Remove</button>
+            <button class="btn secondary remove-send-row" type="button">Remove</button>
         </div>
     </div>
 
@@ -142,7 +143,7 @@
 
 {% block scripts %}
 <script
-    src="{{ url_for('static', filename='connection_test.js') }}"
+    src="{{ url_for('static', filename='connection_test.js') }}?v=3"
     data-status-url="{{ url_for('main.connection_test_status') }}"
     data-start-url="{{ url_for('main.connection_test_start') }}"
     data-stop-url="{{ url_for('main.connection_test_stop') }}"

@@ -1,5 +1,7 @@
 import csv
 import io
+import ipaddress
+import webbrowser
 from datetime import datetime
 from pathlib import Path
 
@@ -8,7 +10,7 @@ from flask import Blueprint, Response, flash, jsonify, redirect, render_template
 from history import load_history
 from ping_utils import get_ping_status, load_ping_history, start_ping, stop_ping
 from nic_utils import clean_dns, get_nics, release_dhcp, renew_dhcp, set_dhcp, set_static
-from scan_utils import get_scannable_nics, get_scan_status, start_lookup, start_scan, stop_scan, start_monitor, stop_monitor, set_monitor_paused
+from scan_utils import get_monitor_log, get_scannable_nics, get_scan_status, start_lookup, start_scan, stop_scan, start_monitor, stop_monitor, set_monitor_paused
 from connection_utils import get_connection_status, get_serial_ports, send_data, start_connection, stop_connection
 from system_utils import is_admin
 from wifi_utils import get_wifi_status, start_wifi_scan, stop_wifi_scan
@@ -18,6 +20,7 @@ from connection_history import (
     save_connection_history_entry,
 )
 from command_utils import run_command
+from config import DOWNLOADS_DIR
 from update_utils import check_for_update, get_update_state, install_downloaded_update, start_update_download
 
 main_bp = Blueprint("main", __name__)
@@ -134,12 +137,31 @@ def ping_status():
     return jsonify(get_ping_status())
 
 
-@main_bp.route("/ping/export.txt")
+def _save_download(filename, content):
+    DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    destination = DOWNLOADS_DIR / filename
+    counter = 2
+    while destination.exists():
+        destination = DOWNLOADS_DIR / f"{Path(filename).stem}-{counter}{Path(filename).suffix}"
+        counter += 1
+    destination.write_bytes(content.encode("utf-8"))
+    return destination.resolve()
+
+
+@main_bp.route("/ping/export.txt", methods=["GET", "POST"])
 def ping_export():
     lines = get_ping_status().get("output", [])
     safe_lines = [str(line).replace("\r\n", "\n").replace("\r", "\n") for line in lines]
     content = "\r\n".join(safe_lines) if safe_lines else "No ping output available."
     filename = f"ping-result-{datetime.now().strftime('%Y%m%d-%H%M%S')}.txt"
+
+    if request.method == "POST":
+        try:
+            destination = _save_download(filename, content + "\r\n")
+        except OSError as exc:
+            return jsonify({"success": False, "message": f"Could not save TXT: {exc}"}), 500
+        return jsonify({"success": True, "filename": filename, "path": str(destination)})
+
     return Response(
         content + "\r\n",
         content_type="text/plain; charset=utf-8",
@@ -253,6 +275,34 @@ def ip_scan_status():
     return jsonify(get_scan_status())
 
 
+@main_bp.route("/ip-scan/open-web", methods=["POST"])
+def ip_scan_open_web():
+    data = request.get_json(silent=True) or {}
+    ip = str(data.get("ip", "")).strip()
+    scheme = str(data.get("scheme", "")).strip().lower()
+
+    try:
+        parsed_ip = ipaddress.ip_address(ip)
+    except ValueError:
+        return jsonify({"success": False, "message": "Invalid device IP address."}), 400
+
+    if parsed_ip.version != 4 or scheme not in {"http", "https"}:
+        return jsonify({"success": False, "message": "Invalid webpage address."}), 400
+
+    result = next(
+        (item for item in get_scan_status().get("results", []) if item.get("ip") == ip),
+        None,
+    )
+    if not result or scheme not in result.get("web_services", []):
+        return jsonify({"success": False, "message": "That webpage is no longer available."}), 409
+
+    url = f"{scheme}://{ip}/"
+    if not webbrowser.open(url, new=2):
+        return jsonify({"success": False, "message": "Could not open the default browser."}), 500
+
+    return jsonify({"success": True, "url": url})
+
+
 def _safe_csv_value(value):
     text = str(value or "")
     if text.lstrip().startswith(("=", "+", "-", "@")):
@@ -270,13 +320,12 @@ def _scan_result_status(item):
     return "OK"
 
 
-@main_bp.route("/ip-scan/export.csv")
-def ip_scan_export():
+def _scan_csv_content(results):
     output = io.StringIO(newline="")
     writer = csv.writer(output, lineterminator="\r\n")
     writer.writerow(["IP", "MAC", "Manufacturer", "Hostname", "Status"])
 
-    for item in get_scan_status().get("results", []):
+    for item in results:
         writer.writerow([
             _safe_csv_value(item.get("ip")),
             _safe_csv_value(item.get("mac")),
@@ -285,9 +334,39 @@ def ip_scan_export():
             _scan_result_status(item),
         ])
 
+    return "\ufeff" + output.getvalue()
+
+
+@main_bp.route("/ip-scan/export.csv", methods=["GET", "POST"])
+def ip_scan_export():
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        visible_results = data.get("results")
+        if not isinstance(visible_results, list) or not all(isinstance(item, dict) for item in visible_results):
+            return jsonify({"success": False, "message": "Invalid visible scan results."}), 400
+        if len(visible_results) > 1024:
+            return jsonify({"success": False, "message": "Too many scan results to export."}), 400
+        results = visible_results
+    else:
+        results = get_scan_status().get("results", [])
+
+    content = _scan_csv_content(results)
     filename = f"ip-scan-{datetime.now().strftime('%Y%m%d-%H%M%S')}.csv"
+
+    if request.method == "POST":
+        try:
+            destination = _save_download(filename, content)
+        except OSError as exc:
+            return jsonify({"success": False, "message": f"Could not save CSV: {exc}"}), 500
+        return jsonify({
+            "success": True,
+            "filename": filename,
+            "path": str(destination),
+            "count": len(results),
+        })
+
     return Response(
-        "\ufeff" + output.getvalue(),
+        content,
         content_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
@@ -302,6 +381,40 @@ def ip_scan_monitor_start():
 def ip_scan_monitor_stop():
     success, message = stop_monitor()
     return jsonify({"success": success, "message": message, **get_scan_status()})
+
+
+@main_bp.route("/ip-scan/monitor/export.txt", methods=["GET", "POST"])
+def ip_scan_monitor_export():
+    lines = get_monitor_log()
+    if not lines:
+        message = "No monitoring log is available."
+        if request.method == "POST":
+            return jsonify({"success": False, "message": message}), 409
+        return Response(message + "\r\n", status=409, content_type="text/plain; charset=utf-8")
+
+    content = "\r\n".join(str(line).replace("\r", "").replace("\n", " ") for line in lines) + "\r\n"
+    filename = f"ip-monitor-{datetime.now().strftime('%Y%m%d-%H%M%S')}.txt"
+
+    if request.method == "POST":
+        try:
+            destination = _save_download(filename, content)
+        except OSError as exc:
+            return jsonify({"success": False, "message": f"Could not save monitor log: {exc}"}), 500
+        return jsonify({
+            "success": True,
+            "filename": filename,
+            "path": str(destination),
+            "count": len(lines),
+        })
+
+    return Response(
+        content,
+        content_type="text/plain; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @main_bp.route("/ip-scan/monitor/pause", methods=["POST"])

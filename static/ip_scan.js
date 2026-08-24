@@ -10,11 +10,14 @@
     const scanStatus = document.getElementById("scanStatus");
     const scanResults = document.getElementById("scanResults");
     const downloadCsvButton = document.getElementById("downloadScanCsv");
+    const downloadMonitorLogButton = document.getElementById("downloadMonitorLog");
+    const exportStatus = document.getElementById("scanExportStatus");
 
     const scanFilter = document.getElementById("scanFilter");
     const clearScanFilter = document.getElementById("clearScanFilter");
 
     const contextMenu = document.getElementById("scanContextMenu");
+    const openWebpageButton = document.getElementById("openWebpageButton");
     const copyIpButton = document.getElementById("copyIpButton");
     const copyMacButton = document.getElementById("copyMacButton");
 
@@ -26,6 +29,17 @@
     let latestResults = [];
     let selectedContextItem = null;
     let monitorStopping = false;
+    let exportStatusTimer = null;
+
+    function showExportSuccess(message) {
+        clearTimeout(exportStatusTimer);
+        exportStatus.textContent = message;
+        exportStatus.classList.add("success");
+        exportStatusTimer = setTimeout(() => {
+            exportStatus.textContent = "";
+            exportStatus.classList.remove("success");
+        }, 4000);
+    }
 
     function matchesFilter(item, filterText) {
         if (!filterText) return true;
@@ -46,14 +60,15 @@
 
         const filterText = scanFilter.value.trim();
         const filteredResults = latestResults.filter(item => matchesFilter(item, filterText));
+        downloadCsvButton.disabled = filteredResults.length === 0;
 
         if (latestResults.length === 0) {
-            scanResults.innerHTML = '<tr><td colspan="5" class="muted-cell">No scan results yet.</td></tr>';
+            scanResults.innerHTML = '<tr><td colspan="6" class="muted-cell">No scan results yet.</td></tr>';
             return;
         }
 
         if (filteredResults.length === 0) {
-            scanResults.innerHTML = '<tr><td colspan="5" class="muted-cell">No results match your search.</td></tr>';
+            scanResults.innerHTML = '<tr><td colspan="6" class="muted-cell">No results match your search.</td></tr>';
             return;
         }
 
@@ -63,6 +78,9 @@
 
             row.dataset.ip = item.ip || "";
             row.dataset.mac = item.mac || "";
+            row.dataset.webScheme = !item.missing && item.web_services?.includes("https")
+                ? "https"
+                : !item.missing && item.web_services?.includes("http") ? "http" : "";
 
             let status = `<span class="status-pill ok">OK</span>`;
 
@@ -77,20 +95,33 @@
             row.classList.toggle("duplicate-ip-row", !!item.duplicate_ip);
             row.classList.toggle("missing-ip-row", !!item.missing);
 
+            const webScheme = row.dataset.webScheme;
+            const webLabel = webScheme ? `${webScheme.toUpperCase()} web interface available` : "";
+            const ipCell = webScheme
+                ? `<button class="scan-web-link" type="button" title="Open ${webScheme.toUpperCase()} webpage">${item.ip || "-"}</button>`
+                : item.ip || "-";
+
             row.innerHTML = `
-                <td>${item.ip || "-"}</td>
+                <td class="web-column">${webScheme ? `<span class="web-available" title="${webLabel}" aria-label="${webLabel}">&#10003;</span>` : ""}</td>
+                <td>${ipCell}</td>
                 <td>${item.mac || "-"}</td>
                 <td>${item.manufacturer || "Unknown"}</td>
                 <td>${item.hostname || "-"}</td>
                 <td>${status}</td>
             `;
 
+            row.querySelector(".scan-web-link")?.addEventListener("click", event => {
+                event.stopPropagation();
+                openWebpage(row.dataset.ip, row.dataset.webScheme);
+            });
+
             row.addEventListener("contextmenu", event => {
                 event.preventDefault();
 
                 selectedContextItem = {
                     ip: row.dataset.ip,
-                    mac: row.dataset.mac
+                    mac: row.dataset.mac,
+                    webScheme: row.dataset.webScheme
                 };
 
                 showContextMenu(event.pageX, event.pageY);
@@ -130,6 +161,7 @@
         const scanFinished = !data.running && !data.lookup_running;
         const hasResults = data.results && data.results.length > 0;
         downloadCsvButton.disabled = !hasResults;
+        downloadMonitorLogButton.disabled = data.monitor_running || !data.monitor_log_available;
         const allowMonitor = !data.large_scan_quick_only;
 
         monitorBox.style.display = scanFinished && hasResults && allowMonitor ? "flex" : "none";
@@ -159,6 +191,7 @@
             return;
         }
 
+        downloadMonitorLogButton.disabled = true;
         const response = await fetch(urls.startUrl, {
             method: "POST",
             headers: {"Content-Type": "application/json"},
@@ -235,6 +268,11 @@
     }
 
     function showContextMenu(x, y) {
+        const scheme = selectedContextItem?.webScheme || "";
+        openWebpageButton.style.display = scheme ? "" : "none";
+        openWebpageButton.textContent = scheme
+            ? `Open webpage (${scheme.toUpperCase()})`
+            : "Open webpage";
         contextMenu.style.left = `${x}px`;
         contextMenu.style.top = `${y}px`;
         contextMenu.style.display = "block";
@@ -261,12 +299,72 @@
         hideContextMenu();
     }
 
+    async function openWebpage(ip, scheme) {
+        if (!ip || !scheme) return;
+
+        hideContextMenu();
+        try {
+            const response = await fetch(urls.openWebUrl, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({ip, scheme})
+            });
+            const data = await response.json();
+            if (!response.ok || !data.success) {
+                alert(data.message || "Could not open webpage.");
+            }
+        } catch (error) {
+            alert(`Could not open webpage: ${error.message}`);
+        }
+    }
+
+    async function saveVisibleResultsCsv() {
+        const filterText = scanFilter.value.trim();
+        const visibleResults = latestResults.filter(item => matchesFilter(item, filterText));
+        if (!visibleResults.length) return;
+
+        downloadCsvButton.disabled = true;
+        try {
+            const response = await fetch(urls.exportUrl, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({results: visibleResults})
+            });
+            const data = await response.json();
+            if (!response.ok || !data.success) {
+                alert(data.message || "Could not save CSV.");
+                return;
+            }
+            showExportSuccess(`Saved ${data.count} visible result${data.count === 1 ? "" : "s"} to Downloads.`);
+        } catch (error) {
+            alert(`Could not save CSV: ${error.message}`);
+        } finally {
+            renderResults(latestResults);
+        }
+    }
+
+    async function saveMonitorLog() {
+        downloadMonitorLogButton.disabled = true;
+        try {
+            const response = await fetch(urls.monitorExportUrl, {method: "POST"});
+            const data = await response.json();
+            if (!response.ok || !data.success) {
+                alert(data.message || "Could not save monitor log.");
+                return;
+            }
+            showExportSuccess(`Saved monitor log (${data.count} entries) to Downloads.`);
+        } catch (error) {
+            alert(`Could not save monitor log: ${error.message}`);
+        } finally {
+            refreshScanStatus();
+        }
+    }
+
     startScanButton.addEventListener("click", startScan);
     lookupDetailsButton.addEventListener("click", lookupDetails);
     stopScanButton.addEventListener("click", stopScan);
-    downloadCsvButton.addEventListener("click", () => {
-        window.location.href = urls.exportUrl;
-    });
+    downloadCsvButton.addEventListener("click", saveVisibleResultsCsv);
+    downloadMonitorLogButton.addEventListener("click", saveMonitorLog);
 
     scanFilter.addEventListener("input", () => {
         renderResults(latestResults);
@@ -279,6 +377,14 @@
 
     copyIpButton.addEventListener("click", () => {
         copyText(selectedContextItem?.ip || "");
+    });
+
+    openWebpageButton.addEventListener("click", event => {
+        event.stopPropagation();
+        openWebpage(
+            selectedContextItem?.ip || "",
+            selectedContextItem?.webScheme || ""
+        );
     });
 
     copyMacButton.addEventListener("click", () => {

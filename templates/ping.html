@@ -27,6 +27,7 @@
     <div class="actions">
         <button id="startPing" class="btn" type="button">Start Ping</button>
         <button id="stopPing" class="btn warn" type="button">Stop Ping</button>
+        <span id="pingExportStatus" class="export-status" role="status" aria-live="polite"></span>
         <button id="downloadPingTxt" class="btn secondary" type="button" disabled>Download TXT</button>
         <span id="pingState" class="desc">Stopped</span>
     </div>
@@ -38,7 +39,7 @@
 
 {% block scripts %}
 <script
-    src="{{ url_for('static', filename='ping.js') }}?v=txt-export-1"
+    src="{{ url_for('static', filename='ping.js') }}?v=export-confirmation-4"
     data-status-url="{{ url_for('main.ping_status') }}"
     data-start-url="{{ url_for('main.ping_start') }}"
     data-stop-url="{{ url_for('main.ping_stop') }}"

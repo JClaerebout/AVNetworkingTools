@@ -35,6 +35,30 @@ def get_base_dir() -> Path:
 
 
 BASE_DIR = get_base_dir()
+
+
+def get_downloads_dir() -> Path:
+    """Return the current user's configured Downloads folder."""
+    if os.name == "nt":
+        try:
+            import winreg
+
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders",
+            ) as key:
+                configured_path, _ = winreg.QueryValueEx(
+                    key,
+                    "{374DE290-123F-4565-9164-39C4925E467B}",
+                )
+                return Path(os.path.expandvars(configured_path)).expanduser()
+        except (ImportError, OSError, TypeError):
+            pass
+
+    return Path.home() / "Downloads"
+
+
+DOWNLOADS_DIR = get_downloads_dir()
 HISTORY_FILE = BASE_DIR / "nic_history.json"
 PING_HISTORY_FILE = BASE_DIR / "ping_history.json"
 CONNECTION_HISTORY_FILE = BASE_DIR / "connection_history.json"

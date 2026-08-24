@@ -31,6 +31,27 @@
     if (!protocolSelect) return;
 
     let lastOutput = "";
+    let draggedSendRow = null;
+    const sendRowsStorageKey = "avNetworkingTools:connection-send-rows";
+
+    function saveSendRowsState() {
+        const values = Array.from(sendRows.querySelectorAll(".send-input"))
+            .map(input => input.value);
+        try {
+            sessionStorage.setItem(sendRowsStorageKey, JSON.stringify(values));
+        } catch (_error) {
+            // The connection page remains usable when browser storage is unavailable.
+        }
+    }
+
+    function loadSendRowsState() {
+        try {
+            const values = JSON.parse(sessionStorage.getItem(sendRowsStorageKey) || "null");
+            return Array.isArray(values) && values.length ? values : null;
+        } catch (_error) {
+            return null;
+        }
+    }
 
     function updateProtocolDefaults() {
         const protocol = protocolSelect.value;
@@ -169,22 +190,58 @@
     function bindSendRow(row) {
         const input = row.querySelector(".send-input");
         row.querySelector(".send-button").addEventListener("click", () => sendValue(input));
-        row.querySelector(".remove-send-row").addEventListener("click", () => row.remove());
+        row.querySelector(".remove-send-row").addEventListener("click", () => {
+            row.remove();
+            updateRemoveButtons();
+            saveSendRowsState();
+        });
+        row.querySelector(".send-drag-handle").addEventListener("dragstart", event => {
+            draggedSendRow = row;
+            row.classList.add("is-dragging");
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData("text/plain", "send-row");
+        });
+        row.querySelector(".send-drag-handle").addEventListener("dragend", () => {
+            row.classList.remove("is-dragging");
+            draggedSendRow = null;
+            saveSendRowsState();
+        });
+        input.addEventListener("input", saveSendRowsState);
         input.addEventListener("keydown", event => {
             if (event.key === "Enter") sendValue(input);
         });
+    }
+
+    function updateRemoveButtons() {
+        const rows = Array.from(sendRows.querySelectorAll(".send-row"));
+        rows.forEach(row => {
+            row.querySelector(".remove-send-row").style.display = rows.length > 1 ? "" : "none";
+        });
+    }
+
+    function sendRowAfterPointer(y) {
+        const rows = Array.from(sendRows.querySelectorAll(".send-row:not(.is-dragging)"));
+
+        return rows.reduce((closest, row) => {
+            const box = row.getBoundingClientRect();
+            const offset = y - box.top - box.height / 2;
+            return offset < 0 && offset > closest.offset ? {offset, row} : closest;
+        }, {offset: Number.NEGATIVE_INFINITY, row: null}).row;
     }
 
     function addRow() {
         const row = document.createElement("div");
         row.className = "send-row";
         row.innerHTML = `
+            <button class="send-drag-handle" type="button" draggable="true" aria-label="Drag to reorder command" title="Drag to reorder">&#9776;</button>
             <input class="send-input" placeholder="Extra command/data">
             <button class="btn send-button" type="button">Send</button>
             <button class="btn secondary remove-send-row" type="button">Remove</button>
         `;
         sendRows.appendChild(row);
         bindSendRow(row);
+        updateRemoveButtons();
+        saveSendRowsState();
         row.querySelector(".send-input").focus();
     }
 
@@ -245,20 +302,24 @@
 
         const list = values && values.length ? values : [""];
 
-        list.forEach((value, index) => {
+        list.forEach(value => {
             const row = document.createElement("div");
             row.className = "send-row";
 
             row.innerHTML = `
+                <button class="send-drag-handle" type="button" draggable="true" aria-label="Drag to reorder command" title="Drag to reorder">&#9776;</button>
                 <input class="send-input" placeholder="Example: power on or \\x50\\x4F\\x57\\x0D">
                 <button class="btn send-button" type="button">Send</button>
-                <button class="btn secondary remove-send-row" type="button" ${index === 0 ? 'style="display:none;"' : ""}>Remove</button>
+                <button class="btn secondary remove-send-row" type="button">Remove</button>
             `;
 
             sendRows.appendChild(row);
             row.querySelector(".send-input").value = value || "";
             bindSendRow(row);
         });
+
+        updateRemoveButtons();
+        saveSendRowsState();
     }
 
     function applyConnectionSettings(entry) {
@@ -349,9 +410,30 @@
     connectButton.addEventListener("click", connect);
     disconnectButton.addEventListener("click", disconnect);
     addSendRow.addEventListener("click", addRow);
+    sendRows.addEventListener("dragover", event => {
+        if (!draggedSendRow) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+
+        const nextRow = sendRowAfterPointer(event.clientY);
+        if (nextRow) {
+            sendRows.insertBefore(draggedSendRow, nextRow);
+        } else {
+            sendRows.appendChild(draggedSendRow);
+        }
+    });
+    sendRows.addEventListener("drop", event => {
+        if (draggedSendRow) event.preventDefault();
+    });
     rxAsHex.addEventListener("change", refreshStatus);
     refreshSerialPorts.addEventListener("click", loadSerialPorts);
-    document.querySelectorAll(".send-row").forEach(bindSendRow);
+    const savedSendRows = loadSendRowsState();
+    if (savedSendRows) {
+        setSendFields(savedSendRows);
+    } else {
+        document.querySelectorAll(".send-row").forEach(bindSendRow);
+        updateRemoveButtons();
+    }
 
     autoScroll.addEventListener("change", () => {
         if (autoScroll.checked) {

@@ -411,6 +411,34 @@ input:focus, select:focus {
     background: rgba(77, 163, 255, 0.08);
 }
 
+.result-table .web-column {
+    width: 44px;
+    padding-left: 8px;
+    padding-right: 8px;
+    text-align: center;
+}
+
+.web-available {
+    color: var(--ok);
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.scan-web-link {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--accent);
+    font: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.scan-web-link:hover,
+.scan-web-link:focus-visible {
+    color: #8ac2ff;
+}
+
 .context-menu {
     display: none;
     position: absolute;
@@ -444,9 +472,36 @@ input:focus, select:focus {
 
 .send-row {
     display: grid;
-    grid-template-columns: 1fr auto auto;
+    grid-template-columns: auto 1fr auto auto;
     gap: 10px;
     align-items: center;
+}
+
+.send-row.is-dragging {
+    opacity: .45;
+}
+
+.send-drag-handle {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    background: #252525;
+    color: var(--muted);
+    font-size: 22px;
+    line-height: 1;
+    cursor: grab;
+}
+
+.send-drag-handle:hover,
+.send-drag-handle:focus-visible {
+    border-color: var(--accent);
+    color: var(--text);
+}
+
+.send-drag-handle:active {
+    cursor: grabbing;
 }
 
 .check-label {
@@ -459,6 +514,17 @@ input:focus, select:focus {
 
 .check-label input {
     width: auto;
+}
+
+.export-status {
+    flex: 0 0 260px;
+    color: var(--muted);
+    font-size: 13px;
+    text-align: right;
+}
+
+.export-status.success {
+    color: var(--ok);
 }
 
 .output-header {
