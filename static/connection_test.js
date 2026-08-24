@@ -11,7 +11,10 @@
     const disconnectButton = document.getElementById("disconnectButton");
     const statusBox = document.getElementById("connStatus");
     const outputBox = document.getElementById("connOutput");
+    const inlineInput = document.getElementById("connInlineInput");
     const autoScroll = document.getElementById("autoScroll");
+    const exportButton = document.getElementById("exportConnectionTxt");
+    const exportStatus = document.getElementById("connectionExportStatus");
     const sendRows = document.getElementById("sendRows");
     const addSendRow = document.getElementById("addSendRow");
     const sendAsHex = document.getElementById("sendAsHex");
@@ -30,8 +33,27 @@
 
     if (!protocolSelect) return;
 
+    const connectionConfigControls = [
+        protocolSelect,
+        hostInput,
+        portInput,
+        usernameInput,
+        passwordInput,
+        serialPort,
+        refreshSerialPorts,
+        serialBaudrate,
+        serialDatabits,
+        serialParity,
+        serialStopbits,
+        connectionHistory,
+        saveConnectionHistory,
+        connectButton
+    ];
+
     let lastOutput = "";
     let draggedSendRow = null;
+    let exportInProgress = false;
+    let exportStatusTimer = null;
     const sendRowsStorageKey = "avNetworkingTools:connection-send-rows";
 
     function saveSendRowsState() {
@@ -93,8 +115,12 @@
             data.running
                 ? data.status_text
                 : "Disconnected";
-        connectButton.disabled = data.running;
+        connectionConfigControls.forEach(control => {
+            control.disabled = data.running;
+        });
         disconnectButton.disabled = !data.running;
+        inlineInput.disabled = !data.running;
+        exportButton.disabled = exportInProgress || !data.output || data.output.length === 0;
 
         const newOutput = data.output && data.output.length
             ? data.output.map(formatOutputLine).join("\n\n")
@@ -124,6 +150,8 @@
     }
 
     async function connect() {
+        resetExportStatus();
+        exportButton.disabled = true;
         const response = await fetch(urls.startUrl, {
             method: "POST",
             headers: {"Content-Type": "application/json"},
@@ -141,7 +169,11 @@
         });
         const data = await response.json();
         renderStatus(data);
-        if (!data.success) alert(data.message);
+        if (!data.success) {
+            alert(data.message);
+        } else {
+            inlineInput.focus();
+        }
     }
 
     async function disconnect() {
@@ -149,12 +181,42 @@
         renderStatus(await response.json());
     }
 
-    async function sendValue(input) {
+    function resetExportStatus() {
+        clearTimeout(exportStatusTimer);
+        exportStatus.textContent = "";
+        exportStatus.classList.remove("success");
+    }
+
+    async function exportConnectionTxt() {
+        exportInProgress = true;
+        exportButton.disabled = true;
+        try {
+            const response = await fetch(urls.exportUrl, {method: "POST"});
+            const data = await response.json();
+            if (!response.ok || !data.success) {
+                alert(data.message || "Could not export connection session.");
+                return;
+            }
+
+            resetExportStatus();
+            exportStatus.textContent = "Saved to Downloads.";
+            exportStatus.classList.add("success");
+            exportStatusTimer = setTimeout(resetExportStatus, 4000);
+        } catch (error) {
+            alert(`Could not export connection session: ${error.message}`);
+        } finally {
+            exportInProgress = false;
+            refreshStatus();
+        }
+    }
+
+    async function sendValue(input, clearAfterSend = false) {
+        const value = input.value;
         const response = await fetch(urls.sendUrl, {
             method: "POST",
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify({
-                data: input.value,
+                data: value,
                 is_hex: sendAsHex.checked,
                 add_cr: sendCr.checked,
                 add_lf: sendLf.checked
@@ -162,7 +224,12 @@
         });
         const data = await response.json();
         renderStatus(data);
-        if (!data.success) alert(data.message);
+        if (!data.success) {
+            alert(data.message);
+            return;
+        }
+
+        if (clearAfterSend && input.value === value) input.value = "";
     }
 
     async function loadSerialPorts() {
@@ -409,7 +476,13 @@
     protocolSelect.addEventListener("change", updateProtocolDefaults);
     connectButton.addEventListener("click", connect);
     disconnectButton.addEventListener("click", disconnect);
+    exportButton.addEventListener("click", exportConnectionTxt);
     addSendRow.addEventListener("click", addRow);
+    inlineInput.addEventListener("keydown", event => {
+        if (event.key !== "Enter" || event.isComposing) return;
+        event.preventDefault();
+        sendValue(inlineInput, true);
+    });
     sendRows.addEventListener("dragover", event => {
         if (!draggedSendRow) return;
         event.preventDefault();

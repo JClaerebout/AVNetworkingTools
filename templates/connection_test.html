@@ -132,22 +132,40 @@
     <div class="output-header">
         <h3>Send / response view</h3>
 
-        <label class="check-label auto-scroll-label">
-            <input id="autoScroll" type="checkbox" checked>
-            Auto scroll
-        </label>
+        <div class="output-header-actions">
+            <span id="connectionExportStatus" class="connection-export-status" aria-live="polite"></span>
+            <button id="exportConnectionTxt" class="btn secondary" type="button" disabled>Export TXT</button>
+            <label class="check-label auto-scroll-label">
+                <input id="autoScroll" type="checkbox" checked>
+                Auto scroll
+            </label>
+        </div>
     </div>
-    <pre id="connOutput" class="ping-output">No connection yet.</pre>
+    <div class="connection-terminal">
+        <pre id="connOutput" class="ping-output">No connection yet.</pre>
+        <div class="connection-terminal-input-row">
+            <span class="connection-terminal-prompt" aria-hidden="true">&gt;</span>
+            <input
+                id="connInlineInput"
+                class="connection-terminal-input"
+                placeholder="Type here and press Enter to send..."
+                aria-label="Send data from the response view"
+                autocomplete="off"
+                disabled
+            >
+        </div>
+    </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script
-    src="{{ url_for('static', filename='connection_test.js') }}?v=3"
+    src="{{ url_for('static', filename='connection_test.js') }}?v=6"
     data-status-url="{{ url_for('main.connection_test_status') }}"
     data-start-url="{{ url_for('main.connection_test_start') }}"
     data-stop-url="{{ url_for('main.connection_test_stop') }}"
     data-send-url="{{ url_for('main.connection_test_send') }}"
+    data-export-url="{{ url_for('main.connection_test_export') }}"
     data-serial-ports-url="{{ url_for('main.connection_test_serial_ports') }}"
     data-history-url="{{ url_for('main.connection_test_history') }}"
     data-history-save-url="{{ url_for('main.connection_test_history_save') }}"

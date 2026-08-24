@@ -236,6 +236,57 @@ def connection_test_status():
     return jsonify(get_connection_status())
 
 
+def _connection_output_text(output):
+    lines = []
+    for item in output:
+        if not isinstance(item, dict):
+            lines.append(str(item))
+            continue
+
+        direction = item.get("direction", "")
+        if direction == "TX":
+            value = item.get("hex", "") if item.get("sent_as_hex") else item.get("ascii", "")
+        else:
+            value = item.get("ascii", "")
+        lines.append(f"[{item.get('time', '')}] {direction}\n{value}")
+
+    return "\n\n".join(lines).replace("\r\n", "\n").replace("\r", "\n")
+
+
+@main_bp.route("/connection-test/export.txt", methods=["GET", "POST"])
+def connection_test_export():
+    output = get_connection_status().get("output", [])
+    if not output:
+        message = "No connection session is available."
+        if request.method == "POST":
+            return jsonify({"success": False, "message": message}), 409
+        return Response(message + "\r\n", status=409, content_type="text/plain; charset=utf-8")
+
+    content = _connection_output_text(output).replace("\n", "\r\n") + "\r\n"
+    filename = f"connection-session-{datetime.now().strftime('%Y%m%d-%H%M%S')}.txt"
+
+    if request.method == "POST":
+        try:
+            destination = _save_download(filename, content)
+        except OSError as exc:
+            return jsonify({"success": False, "message": f"Could not save TXT: {exc}"}), 500
+        return jsonify({
+            "success": True,
+            "filename": filename,
+            "path": str(destination),
+            "count": len(output),
+        })
+
+    return Response(
+        content,
+        content_type="text/plain; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
 @main_bp.route("/ip-scan")
 def ip_scan_page():
     try:

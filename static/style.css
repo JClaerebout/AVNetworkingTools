@@ -300,6 +300,53 @@ input:focus, select:focus {
     color: #dcdcdc;
 }
 
+.connection-terminal {
+    overflow: hidden;
+    border: 1px solid #555;
+    border-radius: 5px;
+    background: #111;
+}
+
+.connection-terminal .ping-output {
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+}
+
+.connection-terminal-input-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-top: 1px solid #333;
+    padding: 10px 12px;
+    color: var(--accent);
+    font-family: Consolas, "Courier New", monospace;
+}
+
+.connection-terminal-prompt {
+    font-weight: 700;
+}
+
+.connection-terminal-input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    padding: 0;
+    outline: 0;
+    background: transparent;
+    color: #dcdcdc;
+    font: inherit;
+}
+
+.connection-terminal-input:focus {
+    box-shadow: none;
+}
+
+.connection-terminal-input:disabled {
+    cursor: not-allowed;
+    opacity: .55;
+}
+
 .command-line-card {
     display: grid;
     gap: 14px;
@@ -536,6 +583,22 @@ input:focus, select:focus {
 
 .output-header h3 {
     margin: 0;
+}
+
+.output-header-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+.connection-export-status {
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.connection-export-status.success {
+    color: var(--ok);
 }
 
 .auto-scroll-label {
