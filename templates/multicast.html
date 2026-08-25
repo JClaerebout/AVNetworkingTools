@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}Multicast Diagnostics - AVNetworkingTools{% endblock %}
+{% block subtitle %}Observe IGMP health, active multicast groups and suspected multicast flooding.{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>IGMP / Multicast Health Test</h2>
+    <p class="desc">
+        Captures IPv4 multicast arriving on one interface and compares it with Windows' joined-group table.
+        For a reliable no-querier result, leave the test running for at least 130 seconds.
+    </p>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+        {% endfor %}
+    {% endwith %}
+
+    <div class="row scan-options-row">
+        <div>
+            <label for="multicastNic">Interface</label>
+            <select id="multicastNic">
+                <option value="">Select interface...</option>
+                {% for nic in nics %}
+                <option value="{{ nic.name }}">{{ nic.name }} - {{ nic.ip }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label>Status</label>
+            <div id="multicastStatus" class="scan-status">Idle</div>
+        </div>
+    </div>
+
+    <div class="actions">
+        <button id="startMulticast" class="btn" type="button">Start Test</button>
+        <button id="stopMulticast" class="btn warn" type="button" disabled>Stop Test</button>
+        <button id="downloadMulticastReport" class="btn secondary" type="button" hidden>Download Report</button>
+        <span id="multicastExportStatus" class="export-status" role="status" aria-live="polite"></span>
+    </div>
+</div>
+
+<div class="multicast-summary-grid">
+    <section class="card multicast-summary">
+        <h2>IGMP</h2>
+        <dl class="diagnostic-list">
+            <div><dt>Interface</dt><dd id="summaryInterface">-</dd></div>
+            <div><dt>IP</dt><dd id="summaryIp">-</dd></div>
+            <div><dt>Querier detected</dt><dd id="summaryQuerier">NO</dd></div>
+            <div><dt>IGMP version</dt><dd id="summaryVersion">Not observed</dd></div>
+            <div><dt>Queries / Reports / Leaves</dt><dd id="summaryIgmpCounts">0 / 0 / 0</dd></div>
+            <div><dt>Elapsed</dt><dd id="summaryElapsed">0 sec</dd></div>
+        </dl>
+        <div id="querierDetails" class="querier-list muted-cell">No query sources observed yet.</div>
+    </section>
+
+    <section class="card multicast-summary">
+        <h2>Warnings</h2>
+        <div id="multicastWarnings" class="diagnostic-warnings">
+            <div class="diagnostic-ok">No warnings. Start a test to collect data.</div>
+        </div>
+    </section>
+</div>
+
+<div class="card scan-results-card">
+    <div class="results-header-row">
+        <h2>Multicast Traffic</h2>
+        <div><span id="multicastTotalRate">0.000 Mbps</span> total</div>
+    </div>
+    <div class="table-wrap">
+        <table class="result-table">
+            <thead>
+                <tr>
+                    <th>Group</th>
+                    <th>Service</th>
+                    <th>Packets/s</th>
+                    <th>Mbps</th>
+                    <th>Total packets</th>
+                    <th>Host joined</th>
+                    <th>Assessment</th>
+                </tr>
+            </thead>
+            <tbody id="multicastGroups">
+                <tr><td colspan="7" class="muted-cell">No multicast traffic observed yet.</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script
+    src="{{ url_for('static', filename='multicast.js') }}?v=4"
+    data-status-url="{{ url_for('main.multicast_status') }}"
+    data-start-url="{{ url_for('main.multicast_start') }}"
+    data-stop-url="{{ url_for('main.multicast_stop') }}"
+    data-export-url="{{ url_for('main.multicast_export') }}"
+></script>
+{% endblock %}

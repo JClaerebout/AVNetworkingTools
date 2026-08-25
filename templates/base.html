@@ -34,7 +34,7 @@
             color: #1f2933;
         }
     </style>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=theme-switch-1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=multicast-layout-2">
 </head>
 <body>
 <header>
@@ -46,10 +46,11 @@
         <nav class="header-actions">
             {% block header_actions %}{% endblock %}
             <a class="btn secondary" href="{{ url_for('main.index') }}">NICs</a>
-            <a class="btn secondary" href="{{ url_for('main.ping_page') }}">Ping</a>
             <a class="btn secondary" href="{{ url_for('main.ip_scan_page') }}">IP Scan</a>
+            <a class="btn secondary" href="{{ url_for('main.ping_page') }}">Ping</a>
             <a class="btn secondary" href="{{ url_for('main.connection_test_page') }}">Connect</a>
             <a class="btn secondary" href="{{ url_for('main.command_line_page') }}">Cmd</a>
+            <a class="btn secondary" href="{{ url_for('main.multicast_page') }}">Multicast</a>
             <a class="btn secondary" href="{{ url_for('main.wifi_scan_page') }}">WiFi Scan</a>
             <button id="themeToggle" class="btn secondary theme-toggle" type="button">
                 <span class="theme-toggle-icon" aria-hidden="true">&#9680;</span>

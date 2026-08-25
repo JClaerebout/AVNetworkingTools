@@ -568,6 +568,71 @@ input:focus, select:focus {
     margin-top: 18px;
 }
 
+.multicast-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    margin-top: 18px;
+}
+
+.diagnostic-list {
+    margin: 0;
+}
+
+.diagnostic-list > div {
+    display: grid;
+    grid-template-columns: minmax(150px, 1fr) minmax(120px, 1fr);
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+}
+
+.diagnostic-list dt {
+    color: var(--muted);
+}
+
+.diagnostic-list dd {
+    margin: 0;
+    font-weight: 700;
+}
+
+.querier-list {
+    margin-top: 12px;
+}
+
+.diagnostic-warnings {
+    display: grid;
+    gap: 10px;
+}
+
+.diagnostic-warning,
+.diagnostic-ok {
+    padding: 11px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+}
+
+.diagnostic-warning.warning {
+    border-color: #b7791f;
+    background: rgba(183, 121, 31, .13);
+}
+
+.diagnostic-warning.danger {
+    border-color: #d9534f;
+    background: rgba(217, 83, 79, .13);
+}
+
+.diagnostic-ok {
+    border-color: #2f855a;
+    background: rgba(47, 133, 90, .12);
+}
+
+@media (max-width: 850px) {
+    .multicast-summary-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
 .table-wrap {
     overflow: auto;
     border: 1px solid var(--line);

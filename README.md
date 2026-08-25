@@ -31,6 +31,7 @@ The application opens its own desktop window and runs locally at `http://127.0.0
 - Export IP-scan results to CSV and ping output to text.
 - Run continuous ping tests with saved history.
 - Inspect Wi-Fi SSIDs, channels, signal levels, channel load and conflicts.
+- Observe IGMP queriers and versions, measure traffic by multicast group, and flag likely multicast flooding against the selected interface's joined groups.
 - Test TCP, UDP, SSH and serial connections using saved presets.
 - Run local command-line diagnostics from the application.
 - Check for, download and install integrity-checked GitHub release updates.
@@ -76,6 +77,7 @@ app.py              Flask app factory and startup
 routes.py           Web routes
 nic_utils.py        Windows NIC scan/change logic
 wifi_utils.py       Wi-Fi scan parsing, grouping, and channel analysis
+multicast_utils.py  IGMP parsing, multicast rate measurement, and flooding diagnostics
 scan_utils.py       LAN scan and device monitoring logic
 manufacturer_db.py  Local IEEE MAC manufacturer database/update logic
 ping_utils.py       Ping monitor logic

@@ -52,6 +52,45 @@ class DownloadExportTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertFalse(response.get_json()["success"])
 
+    @patch("routes.get_multicast_status")
+    def test_multicast_report_post_saves_stopped_snapshot(self, get_multicast_status):
+        get_multicast_status.return_value = {
+            "running": False,
+            "interface": "Ethernet 2",
+            "ip": "192.168.10.54",
+            "elapsed_seconds": 130.0,
+            "packets": 824,
+            "total_mbps": 1.25,
+            "querier_detected": True,
+            "igmp_versions": ["v2"],
+            "igmp_counts": {"query": 2, "report": 3, "leave": 1},
+            "queriers": [{"ip": "192.168.10.1", "last_query_seconds": 5.0, "query_interval_seconds": 60.0}],
+            "joined_groups": ["224.0.0.251"],
+            "groups": [{
+                "address": "239.69.1.12", "service": "Unknown", "packets_per_second": 100.0,
+                "mbps": 1.25, "packets": 824, "membership_known": True, "joined": False,
+                "suspected_flood": True,
+            }],
+            "warnings": [{"severity": "danger", "message": "Multicast flooding suspected."}],
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir, patch("routes.DOWNLOADS_DIR", Path(temp_dir)):
+            response = app.test_client().post("/multicast/export.txt")
+            data = response.get_json()
+            content = Path(data["path"]).read_text(encoding="utf-8")
+
+            self.assertEqual(response.status_code, 200)
+            self.assertTrue(data["success"])
+            self.assertIn("Ethernet 2", content)
+            self.assertIn("239.69.1.12", content)
+            self.assertIn("last query 5.0 sec before stop", content)
+
+    @patch("routes.get_multicast_status", return_value={"running": True, "interface": "Ethernet"})
+    def test_multicast_report_requires_stopped_test(self, _get_multicast_status):
+        response = app.test_client().post("/multicast/export.txt")
+        self.assertEqual(response.status_code, 409)
+        self.assertFalse(response.get_json()["success"])
+
     @patch("routes.get_monitor_log")
     def test_monitor_log_post_saves_txt_in_downloads_folder(self, get_monitor_log):
         get_monitor_log.return_value = [

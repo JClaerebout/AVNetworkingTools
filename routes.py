@@ -22,6 +22,7 @@ from connection_history import (
 from command_utils import run_command
 from config import DOWNLOADS_DIR
 from update_utils import check_for_update, get_update_state, install_downloaded_update, start_update_download
+from multicast_utils import get_multicast_status, start_multicast_test, stop_multicast_test
 
 main_bp = Blueprint("main", __name__)
 
@@ -496,6 +497,107 @@ def wifi_scan_stop():
 @main_bp.route("/wifi-scan/status")
 def wifi_scan_status():
     return jsonify(get_wifi_status())
+
+
+@main_bp.route("/multicast")
+def multicast_page():
+    try:
+        nics = [nic for nic in get_nics() if nic.get("link_status") == "Up" and nic.get("ip")]
+    except Exception as exc:
+        nics = []
+        flash(f"Could not load network interfaces: {exc}", "error")
+    return render_template("multicast.html", nics=nics)
+
+
+@main_bp.route("/multicast/start", methods=["POST"])
+def multicast_start():
+    data = request.get_json(silent=True) or {}
+    success, message = start_multicast_test(data.get("interface", ""))
+    return jsonify({"success": success, "message": message, **get_multicast_status()})
+
+
+@main_bp.route("/multicast/stop", methods=["POST"])
+def multicast_stop():
+    success, message = stop_multicast_test()
+    return jsonify({"success": success, "message": message, **get_multicast_status()})
+
+
+@main_bp.route("/multicast/status")
+def multicast_status():
+    return jsonify(get_multicast_status())
+
+
+def _multicast_report_content(status):
+    counts = status.get("igmp_counts", {})
+    lines = [
+        "AVNetworkingTools - IGMP / Multicast Health Report",
+        "=" * 52,
+        f"Interface: {status.get('interface') or '-'}",
+        f"IP: {status.get('ip') or '-'}",
+        f"Capture duration: {status.get('elapsed_seconds', 0)} seconds",
+        f"Captured multicast packets: {status.get('packets', 0)}",
+        f"Rate at stop: {status.get('total_mbps', 0):.3f} Mbps",
+        "",
+        "IGMP",
+        "----",
+        f"Querier detected: {'YES' if status.get('querier_detected') else 'NO'}",
+        f"Versions observed: {', '.join(status.get('igmp_versions', [])) or 'None'}",
+        f"Queries / Reports / Leaves: {counts.get('query', 0)} / {counts.get('report', 0)} / {counts.get('leave', 0)}",
+    ]
+    queriers = status.get("queriers", [])
+    if queriers:
+        lines.extend(["", "Querier sources", "---------------"])
+        for item in queriers:
+            interval = item.get("query_interval_seconds")
+            interval_text = f"{interval} sec" if interval is not None else "not yet measured"
+            lines.append(f"{item.get('ip', '-')} | last query {item.get('last_query_seconds', 0)} sec before stop | interval {interval_text}")
+
+    joined = status.get("joined_groups", [])
+    lines.extend(["", "Joined groups", "-------------"])
+    lines.extend(joined or ["Unavailable or none"])
+
+    lines.extend(["", "Multicast traffic", "-----------------"])
+    groups = status.get("groups", [])
+    if groups:
+        lines.append("Group | Service | Packets/s at stop | Mbps at stop | Total packets | Joined | Assessment")
+        for item in groups:
+            membership = "Unknown" if not item.get("membership_known") else ("Yes" if item.get("joined") else "No")
+            assessment = "Flooding suspected" if item.get("suspected_flood") else "Normal"
+            lines.append(
+                f"{item.get('address', '-')} | {item.get('service', 'Unknown')} | "
+                f"{item.get('packets_per_second', 0):.1f} | {item.get('mbps', 0):.3f} | "
+                f"{item.get('packets', 0)} | {membership} | {assessment}"
+            )
+    else:
+        lines.append("No multicast traffic observed.")
+
+    lines.extend(["", "Warnings", "--------"])
+    warnings = status.get("warnings", [])
+    lines.extend((f"[{item.get('severity', 'warning').upper()}] {item.get('message', '')}" for item in warnings))
+    if not warnings:
+        lines.append("No health warnings detected.")
+    return "\r\n".join(lines) + "\r\n"
+
+
+@main_bp.route("/multicast/export.txt", methods=["POST"])
+def multicast_export():
+    status = get_multicast_status()
+    if status.get("running"):
+        return jsonify({"success": False, "message": "Stop the multicast test before downloading a report."}), 409
+    if not status.get("interface"):
+        return jsonify({"success": False, "message": "No multicast test report is available."}), 409
+
+    filename = f"multicast-report-{datetime.now().strftime('%Y%m%d-%H%M%S')}.txt"
+    try:
+        destination = _save_download(filename, _multicast_report_content(status))
+    except OSError as exc:
+        return jsonify({"success": False, "message": f"Could not save multicast report: {exc}"}), 500
+    return jsonify({
+        "success": True,
+        "filename": filename,
+        "path": str(destination),
+        "groups": len(status.get("groups", [])),
+    })
 
 @main_bp.route("/connection-test/history")
 def connection_test_history():
