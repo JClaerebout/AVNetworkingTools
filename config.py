@@ -62,4 +62,5 @@ DOWNLOADS_DIR = get_downloads_dir()
 HISTORY_FILE = BASE_DIR / "nic_history.json"
 PING_HISTORY_FILE = BASE_DIR / "ping_history.json"
 CONNECTION_HISTORY_FILE = BASE_DIR / "connection_history.json"
+SCRIPT_HISTORY_FILE = BASE_DIR / "script_history.json"
 MANUFACTURER_DB_FILE = BASE_DIR / "ieee_manufacturers.json"

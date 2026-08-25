@@ -34,28 +34,43 @@
             color: #1f2933;
         }
     </style>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=context-copy-1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=header-nav-1">
 </head>
 <body>
+{% set current_endpoint = request.endpoint or '' %}
+{% set more_endpoints = ['main.scripts_page', 'main.command_line_page', 'main.multicast_page', 'main.wifi_scan_page'] %}
 <header>
     <div class="header-inner">
         <div class="header-copy">
             <h1>AVNetworkingTools <span class="app-version">v{{ app_version }}</span></h1>
             <div class="hint">{% block subtitle %}View and change IP, subnet, gateway, DNS, static/DHCP per adapter.{% endblock %}</div>
         </div>
-        <nav class="header-actions">
-            {% block header_actions %}{% endblock %}
-            <a class="btn secondary" href="{{ url_for('main.index') }}">NICs</a>
-            <a class="btn secondary" href="{{ url_for('main.ip_scan_page') }}">IP Scan</a>
-            <a class="btn secondary" href="{{ url_for('main.ping_page') }}">Ping</a>
-            <a class="btn secondary" href="{{ url_for('main.connection_test_page') }}">Connect</a>
-            <a class="btn secondary" href="{{ url_for('main.command_line_page') }}">Cmd</a>
-            <a class="btn secondary" href="{{ url_for('main.multicast_page') }}">Multicast</a>
-            <a class="btn secondary" href="{{ url_for('main.wifi_scan_page') }}">WiFi Scan</a>
-            <button id="themeToggle" class="btn secondary theme-toggle" type="button">
-                <span class="theme-toggle-icon" aria-hidden="true">&#9680;</span>
-                <span class="theme-toggle-label">Theme: Auto</span>
+        <nav class="header-actions" aria-label="Main navigation">
+            <button class="nav-menu-toggle" type="button" aria-expanded="false" aria-controls="headerNavPanel">
+                <span aria-hidden="true">&#9776;</span> Menu
             </button>
+            <div id="headerNavPanel" class="header-nav-panel">
+                {% block header_actions %}{% endblock %}
+                <div class="primary-nav">
+                    <a class="nav-link{% if current_endpoint == 'main.index' %} active{% endif %}" href="{{ url_for('main.index') }}"{% if current_endpoint == 'main.index' %} aria-current="page"{% endif %}>NICs</a>
+                    <a class="nav-link{% if current_endpoint == 'main.ip_scan_page' %} active{% endif %}" href="{{ url_for('main.ip_scan_page') }}"{% if current_endpoint == 'main.ip_scan_page' %} aria-current="page"{% endif %}>IP Scan</a>
+                    <a class="nav-link{% if current_endpoint == 'main.ping_page' %} active{% endif %}" href="{{ url_for('main.ping_page') }}"{% if current_endpoint == 'main.ping_page' %} aria-current="page"{% endif %}>Ping</a>
+                    <a class="nav-link{% if current_endpoint == 'main.connection_test_page' %} active{% endif %}" href="{{ url_for('main.connection_test_page') }}"{% if current_endpoint == 'main.connection_test_page' %} aria-current="page"{% endif %}>Connect</a>
+                </div>
+                <details class="more-nav">
+                    <summary class="nav-link{% if current_endpoint in more_endpoints %} active{% endif %}">More <span aria-hidden="true">&#9662;</span></summary>
+                    <div class="more-nav-menu">
+                        <a class="nav-link{% if current_endpoint == 'main.scripts_page' %} active{% endif %}" href="{{ url_for('main.scripts_page') }}"{% if current_endpoint == 'main.scripts_page' %} aria-current="page"{% endif %}>Scripts</a>
+                        <a class="nav-link{% if current_endpoint == 'main.command_line_page' %} active{% endif %}" href="{{ url_for('main.command_line_page') }}"{% if current_endpoint == 'main.command_line_page' %} aria-current="page"{% endif %}>Command Line</a>
+                        <a class="nav-link{% if current_endpoint == 'main.multicast_page' %} active{% endif %}" href="{{ url_for('main.multicast_page') }}"{% if current_endpoint == 'main.multicast_page' %} aria-current="page"{% endif %}>Multicast</a>
+                        <a class="nav-link{% if current_endpoint == 'main.wifi_scan_page' %} active{% endif %}" href="{{ url_for('main.wifi_scan_page') }}"{% if current_endpoint == 'main.wifi_scan_page' %} aria-current="page"{% endif %}>WiFi Scan</a>
+                    </div>
+                </details>
+                <button id="themeToggle" class="theme-toggle" type="button">
+                    <span class="theme-toggle-icon" aria-hidden="true">&#9680;</span>
+                    <span class="theme-toggle-label visually-hidden">Theme: Auto</span>
+                </button>
+            </div>
         </nav>
     </div>
 </header>
@@ -84,7 +99,7 @@
 </div>
 
 <script
-    src="{{ url_for('static', filename='app.js') }}?v=theme-switch-2"
+    src="{{ url_for('static', filename='app.js') }}?v=header-nav-1"
     data-ip-scan-status-url="{{ url_for('main.ip_scan_status') }}"
 ></script>
 <script src="{{ url_for('static', filename='updater.js') }}?v=1"></script>

@@ -23,6 +23,8 @@ from command_utils import run_command
 from config import DOWNLOADS_DIR
 from update_utils import check_for_update, get_update_state, install_downloaded_update, start_update_download
 from multicast_utils import get_multicast_status, start_multicast_test, stop_multicast_test
+from script_utils import get_script_status, set_script_paused, start_script, stop_script
+from script_history import delete_script, get_script, list_scripts, save_script
 
 main_bp = Blueprint("main", __name__)
 
@@ -235,6 +237,65 @@ def connection_test_stop():
 @main_bp.route("/connection-test/status")
 def connection_test_status():
     return jsonify(get_connection_status())
+
+
+@main_bp.route("/scripts")
+def scripts_page():
+    return render_template("scripts.html")
+
+
+@main_bp.route("/scripts/start", methods=["POST"])
+def scripts_start():
+    data = request.get_json(silent=True) or {}
+    success, message = start_script(data.get("blocks"))
+    return jsonify({"success": success, "message": message, **get_script_status()}), 200 if success else 409
+
+
+@main_bp.route("/scripts/pause", methods=["POST"])
+def scripts_pause():
+    data = request.get_json(silent=True) or {}
+    success, message = set_script_paused(bool(data.get("paused")))
+    return jsonify({"success": success, "message": message, **get_script_status()}), 200 if success else 409
+
+
+@main_bp.route("/scripts/stop", methods=["POST"])
+def scripts_stop():
+    success, message = stop_script()
+    return jsonify({"success": success, "message": message, **get_script_status()}), 200 if success else 409
+
+
+@main_bp.route("/scripts/status")
+def scripts_status():
+    return jsonify(get_script_status())
+
+
+@main_bp.route("/scripts/saved")
+def scripts_saved():
+    return jsonify({"scripts": list_scripts()})
+
+
+@main_bp.route("/scripts/saved/<path:name>")
+def scripts_saved_entry(name):
+    entry = get_script(name)
+    if not entry:
+        return jsonify({"success": False, "message": "Script not found."}), 404
+    return jsonify({"success": True, "script": entry})
+
+
+@main_bp.route("/scripts/save", methods=["POST"])
+def scripts_save():
+    data = request.get_json(silent=True) or {}
+    success, message = save_script(
+        data.get("name", ""), data.get("blocks"), bool(data.get("overwrite"))
+    )
+    status = 200 if success else (409 if message == "NAME_EXISTS" else 400)
+    return jsonify({"success": success, "message": message}), status
+
+
+@main_bp.route("/scripts/saved/<path:name>", methods=["DELETE"])
+def scripts_delete(name):
+    success, message = delete_script(name)
+    return jsonify({"success": success, "message": message}), 200 if success else 404
 
 
 def _connection_output_text(output):

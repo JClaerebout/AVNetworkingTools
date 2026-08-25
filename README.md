@@ -30,6 +30,7 @@ The application opens its own desktop window and runs locally at `http://127.0.0
 - Monitor discovered devices for missing hosts and duplicate-IP conflicts.
 - Export IP-scan results to CSV and ping output to text.
 - Run continuous ping tests with saved history.
+- Build, save and run multi-device TCP, UDP, Telnet or SSH command scripts.
 - Inspect Wi-Fi SSIDs, channels, signal levels, channel load and conflicts.
 - Observe IGMP queriers and versions, measure traffic by multicast group, and flag likely multicast flooding against the selected interface's joined groups.
 - Test TCP, UDP, SSH and serial connections using saved presets.

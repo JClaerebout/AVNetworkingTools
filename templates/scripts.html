@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Scripts - AVNetworkingTools{% endblock %}
+{% block subtitle %}[Beta] Build and run repeatable command sequences across one or more AV devices.{% endblock %}
+
+{% block content %}
+<div class="script-layout">
+    <section class="card script-builder-card">
+        <div class="script-heading">
+            <div>
+                <h2>Script canvas</h2>
+                <p class="desc">Add blocks in execution order. A Target block stays active until the next Target block.</p>
+            </div>
+            <div class="actions script-add-actions">
+                <button id="addTargetBlock" class="btn secondary" type="button">+ Target</button>
+                <button id="addCommandBlock" class="btn secondary" type="button">+ Command</button>
+                <button id="addDelayBlock" class="btn secondary" type="button">+ Delay</button>
+            </div>
+        </div>
+
+        <div class="script-save-bar">
+            <div class="script-field">
+                <label for="savedScriptSelect">Saved scripts</label>
+                <select id="savedScriptSelect"><option value="">Select a saved script...</option></select>
+            </div>
+            <button id="loadScript" class="btn secondary" type="button" disabled>Load</button>
+            <button id="saveScript" class="btn secondary" type="button">Save as...</button>
+            <button id="deleteScript" class="btn secondary" type="button" disabled>Delete</button>
+            <span id="scriptSaveStatus" class="export-status" role="status" aria-live="polite"></span>
+        </div>
+
+        <div id="scriptCanvas" class="script-canvas" aria-label="Script blocks"></div>
+
+        <div id="scriptEmpty" class="script-empty">
+            <strong>Your canvas is empty</strong>
+            <span>Add a Target block, followed by Command and Delay blocks.</span>
+        </div>
+    </section>
+
+    <aside class="card script-runner-card">
+        <h2>Execution</h2>
+        <div id="scriptStatus" class="scan-status">Idle</div>
+        <div class="actions">
+            <button id="runScript" class="btn" type="button">Run</button>
+            <button id="pauseScript" class="btn secondary" type="button" disabled>Pause</button>
+            <button id="stopScript" class="btn warn" type="button" disabled>Stop</button>
+        </div>
+        <div class="output-header">
+            <h3>Activity log</h3>
+            <button id="clearScriptLog" class="btn secondary" type="button">Clear view</button>
+        </div>
+        <pre id="scriptOutput" class="ping-output script-output">No script run yet.</pre>
+    </aside>
+</div>
+
+<template id="targetBlockTemplate">
+    <article class="script-block target-block" draggable="true" data-type="target">
+        <div class="script-block-header">
+            <span class="script-drag" title="Drag to reorder" aria-hidden="true">&#9776;</span>
+            <strong>Target</strong>
+            <span class="script-block-summary">Device group</span>
+            <button class="script-remove" type="button" aria-label="Remove block">&times;</button>
+        </div>
+        <div class="script-block-body">
+            <div class="script-field script-targets-field">
+                <label>IP addresses / hostnames <span class="hint-inline">one per line</span></label>
+                <textarea class="target-list" rows="3" placeholder="192.168.1.50&#10;192.168.1.51"></textarea>
+            </div>
+            <div class="script-field">
+                <label>Protocol</label>
+                <select class="target-protocol">
+                    <option value="tcp">TCP</option><option value="udp">UDP</option>
+                    <option value="telnet">Telnet</option><option value="ssh">SSH</option>
+                </select>
+            </div>
+            <div class="script-field">
+                <label>Port</label>
+                <input class="target-port" type="number" min="1" max="65535" value="23">
+            </div>
+            <div class="script-field">
+                <label>Run targets</label>
+                <select class="target-mode"><option value="sequential">Sequential</option><option value="parallel">Parallel</option></select>
+            </div>
+            <div class="script-field device-delay-field">
+                <label>Between devices (sec)</label>
+                <input class="device-delay" type="number" min="0" max="3600" step="0.1" value="0">
+            </div>
+            <div class="script-field ssh-script-field" hidden>
+                <label>SSH username</label><input class="target-username" autocomplete="off">
+            </div>
+            <div class="script-field ssh-script-field" hidden>
+                <label>SSH password</label><input class="target-password" type="password" autocomplete="off">
+            </div>
+        </div>
+    </article>
+</template>
+
+<template id="commandBlockTemplate">
+    <article class="script-block command-block" draggable="true" data-type="command">
+        <div class="script-block-header">
+            <span class="script-drag" title="Drag to reorder" aria-hidden="true">&#9776;</span>
+            <strong>Command</strong>
+            <span class="script-block-summary">Send data</span>
+            <button class="script-remove" type="button" aria-label="Remove block">&times;</button>
+        </div>
+        <div class="script-block-body command-block-body">
+            <div class="script-field script-command-field">
+                <label>Command / data</label>
+                <input class="command-value" placeholder="Example: PWR ON or 50 57 52 20 4F 4E">
+            </div>
+            <label class="check-label"><input class="command-hex" type="checkbox"> HEX</label>
+            <label class="check-label"><input class="command-cr" type="checkbox"> CR</label>
+            <label class="check-label"><input class="command-lf" type="checkbox" checked> LF</label>
+        </div>
+    </article>
+</template>
+
+<template id="delayBlockTemplate">
+    <article class="script-block delay-block" draggable="true" data-type="delay">
+        <div class="script-block-header">
+            <span class="script-drag" title="Drag to reorder" aria-hidden="true">&#9776;</span>
+            <strong>Delay</strong>
+            <span class="script-block-summary">Wait before continuing</span>
+            <button class="script-remove" type="button" aria-label="Remove block">&times;</button>
+        </div>
+        <div class="script-block-body delay-block-body">
+            <div class="script-field">
+                <label>Duration (seconds)</label>
+                <input class="delay-duration" type="number" min="0" max="3600" step="0.1" value="1">
+            </div>
+        </div>
+    </article>
+</template>
+{% endblock %}
+
+{% block scripts %}
+<script
+    src="{{ url_for('static', filename='scripts.js') }}?v=1"
+    data-start-url="{{ url_for('main.scripts_start') }}"
+    data-pause-url="{{ url_for('main.scripts_pause') }}"
+    data-stop-url="{{ url_for('main.scripts_stop') }}"
+    data-status-url="{{ url_for('main.scripts_status') }}"
+    data-saved-url="{{ url_for('main.scripts_saved') }}"
+    data-save-url="{{ url_for('main.scripts_save') }}"
+    data-entry-url="{{ url_for('main.scripts_saved_entry', name='__NAME__') }}"
+    data-delete-url="{{ url_for('main.scripts_delete', name='__NAME__') }}"
+></script>
+{% endblock %}

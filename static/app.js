@@ -64,6 +64,40 @@
     }
 })();
 
+// Collapse navigation into a compact menu on narrow screens.
+(function enableHeaderNavigation() {
+    const navigation = document.querySelector('.header-actions');
+    const toggle = navigation?.querySelector('.nav-menu-toggle');
+    const moreMenu = navigation?.querySelector('.more-nav');
+    if (!navigation || !toggle) return;
+
+    function setMenuOpen(open) {
+        navigation.classList.toggle('is-open', open);
+        toggle.setAttribute('aria-expanded', String(open));
+    }
+
+    toggle.addEventListener('click', () => {
+        setMenuOpen(!navigation.classList.contains('is-open'));
+    });
+
+    document.addEventListener('click', event => {
+        if (navigation.contains(event.target)) return;
+        setMenuOpen(false);
+        if (moreMenu) moreMenu.open = false;
+    });
+
+    document.addEventListener('keydown', event => {
+        if (event.key !== 'Escape') return;
+        setMenuOpen(false);
+        if (moreMenu) moreMenu.open = false;
+        toggle.focus();
+    });
+
+    window.addEventListener('resize', () => {
+        if (window.innerWidth > 760) setMenuOpen(false);
+    });
+})();
+
 // Offer devices from the most recent IP scan without restricting manual IP entry.
 (function enableLastScanIpSuggestions() {
     const inputs = document.querySelectorAll('[data-ip-suggestions]');

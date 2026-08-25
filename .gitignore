@@ -24,6 +24,7 @@ dist/
 nic_history.json
 ping_history.json
 connection_history.json
+script_history.json
 /ieee_manufacturers.json
 
 # OS/editor noise
