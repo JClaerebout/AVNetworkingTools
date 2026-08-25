@@ -37,7 +37,7 @@
 
     function updateHistory(history) {
         const selected = historySelect.value;
-        historySelect.innerHTML = '<option value="">Select previous ping IP...</option>';
+        historySelect.innerHTML = '<option value="">Select previous target...</option>';
         for (const ip of history || []) {
             const option = document.createElement("option");
             option.value = ip;

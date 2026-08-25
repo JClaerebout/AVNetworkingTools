@@ -20,6 +20,8 @@
     const openWebpageButton = document.getElementById("openWebpageButton");
     const copyIpButton = document.getElementById("copyIpButton");
     const copyMacButton = document.getElementById("copyMacButton");
+    const copyHostnameButton = document.getElementById("copyHostnameButton");
+    const copyManufacturerButton = document.getElementById("copyManufacturerButton");
 
     const monitorBox = document.getElementById("monitorBox");
     const monitorScanCheckbox = document.getElementById("monitorScan");
@@ -78,6 +80,8 @@
 
             row.dataset.ip = item.ip || "";
             row.dataset.mac = item.mac || "";
+            row.dataset.hostname = item.hostname || "";
+            row.dataset.manufacturer = item.manufacturer || "";
             row.dataset.webScheme = !item.missing && item.web_services?.includes("https")
                 ? "https"
                 : !item.missing && item.web_services?.includes("http") ? "http" : "";
@@ -121,6 +125,8 @@
                 selectedContextItem = {
                     ip: row.dataset.ip,
                     mac: row.dataset.mac,
+                    hostname: row.dataset.hostname,
+                    manufacturer: row.dataset.manufacturer,
                     webScheme: row.dataset.webScheme
                 };
 
@@ -269,6 +275,8 @@
 
     function showContextMenu(x, y) {
         const scheme = selectedContextItem?.webScheme || "";
+        copyHostnameButton.disabled = !isCopyableDetail(selectedContextItem?.hostname);
+        copyManufacturerButton.disabled = !isCopyableDetail(selectedContextItem?.manufacturer);
         openWebpageButton.style.display = scheme ? "" : "none";
         openWebpageButton.textContent = scheme
             ? `Open webpage (${scheme.toUpperCase()})`
@@ -276,6 +284,14 @@
         contextMenu.style.left = `${x}px`;
         contextMenu.style.top = `${y}px`;
         contextMenu.style.display = "block";
+    }
+
+    function isCopyableDetail(value) {
+        const normalized = (value || "").trim().toLowerCase();
+        return normalized !== ""
+            && normalized !== "-"
+            && normalized !== "unknown"
+            && normalized !== "looking up...";
     }
 
     function hideContextMenu() {
@@ -389,6 +405,14 @@
 
     copyMacButton.addEventListener("click", () => {
         copyText(selectedContextItem?.mac || "");
+    });
+
+    copyHostnameButton.addEventListener("click", () => {
+        copyText(selectedContextItem?.hostname || "");
+    });
+
+    copyManufacturerButton.addEventListener("click", () => {
+        copyText(selectedContextItem?.manufacturer || "");
     });
 
     document.addEventListener("click", hideContextMenu);

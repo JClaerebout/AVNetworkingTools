@@ -52,13 +52,17 @@
 
     let lastOutput = "";
     let draggedSendRow = null;
+    let recalledHistoryName = "";
     let exportInProgress = false;
     let exportStatusTimer = null;
     const sendRowsStorageKey = "avNetworkingTools:connection-send-rows";
 
     function saveSendRowsState() {
-        const values = Array.from(sendRows.querySelectorAll(".send-input"))
-            .map(input => input.value);
+        const values = Array.from(sendRows.querySelectorAll(".send-row"))
+            .map(row => ({
+                command: row.querySelector(".send-input").value,
+                name: row.querySelector(".send-name-input").value
+            }));
         try {
             sessionStorage.setItem(sendRowsStorageKey, JSON.stringify(values));
         } catch (_error) {
@@ -69,7 +73,11 @@
     function loadSendRowsState() {
         try {
             const values = JSON.parse(sessionStorage.getItem(sendRowsStorageKey) || "null");
-            return Array.isArray(values) && values.length ? values : null;
+            if (!Array.isArray(values) || !values.length) return null;
+
+            return values.map(value => typeof value === "string"
+                ? {command: value, name: ""}
+                : {command: value.command || "", name: value.name || ""});
         } catch (_error) {
             return null;
         }
@@ -256,6 +264,7 @@
 
     function bindSendRow(row) {
         const input = row.querySelector(".send-input");
+        const nameInput = row.querySelector(".send-name-input");
         row.querySelector(".send-button").addEventListener("click", () => sendValue(input));
         row.querySelector(".remove-send-row").addEventListener("click", () => {
             row.remove();
@@ -274,6 +283,7 @@
             saveSendRowsState();
         });
         input.addEventListener("input", saveSendRowsState);
+        nameInput.addEventListener("input", saveSendRowsState);
         input.addEventListener("keydown", event => {
             if (event.key === "Enter") sendValue(input);
         });
@@ -302,6 +312,7 @@
         row.innerHTML = `
             <button class="send-drag-handle" type="button" draggable="true" aria-label="Drag to reorder command" title="Drag to reorder">&#9776;</button>
             <input class="send-input" placeholder="Extra command/data">
+            <input class="send-name-input" placeholder="Optional command name" aria-label="Optional command name">
             <button class="btn send-button" type="button">Send</button>
             <button class="btn secondary remove-send-row" type="button">Remove</button>
         `;
@@ -313,8 +324,9 @@
     }
 
     function collectConnectionSettings(name, overwrite = false) {
-        const sendFields = Array.from(document.querySelectorAll(".send-input"))
-            .map(input => input.value);
+        const sendFieldRows = Array.from(sendRows.querySelectorAll(".send-row"));
+        const sendFields = sendFieldRows.map(row => row.querySelector(".send-input").value);
+        const sendFieldNames = sendFieldRows.map(row => row.querySelector(".send-name-input").value);
 
         return {
             name: name,
@@ -334,6 +346,7 @@
             stopbits: serialStopbits.value,
 
             send_fields: sendFields,
+            send_field_names: sendFieldNames,
 
             send_as_hex: sendAsHex.checked,
             rx_as_hex: rxAsHex.checked,
@@ -364,24 +377,26 @@
         });
     }
 
-    function setSendFields(values) {
+    function setSendFields(values, names = []) {
         sendRows.innerHTML = "";
 
         const list = values && values.length ? values : [""];
 
-        list.forEach(value => {
+        list.forEach((value, index) => {
             const row = document.createElement("div");
             row.className = "send-row";
 
             row.innerHTML = `
                 <button class="send-drag-handle" type="button" draggable="true" aria-label="Drag to reorder command" title="Drag to reorder">&#9776;</button>
                 <input class="send-input" placeholder="Example: power on or \\x50\\x4F\\x57\\x0D">
+                <input class="send-name-input" placeholder="Optional command name" aria-label="Optional command name">
                 <button class="btn send-button" type="button">Send</button>
                 <button class="btn secondary remove-send-row" type="button">Remove</button>
             `;
 
             sendRows.appendChild(row);
             row.querySelector(".send-input").value = value || "";
+            row.querySelector(".send-name-input").value = names[index] || "";
             bindSendRow(row);
         });
 
@@ -409,7 +424,7 @@
         sendLf.checked = !!entry.send_lf;
         autoScroll.checked = entry.auto_scroll !== false;
 
-        setSendFields(entry.send_fields || [""]);
+        setSendFields(entry.send_fields || [""], entry.send_field_names || []);
 
         updateProtocolDefaults();
 
@@ -456,6 +471,7 @@
 
         await loadConnectionHistory();
         connectionHistory.value = name;
+        recalledHistoryName = name;
     }
 
     async function loadSelectedConnectionHistory() {
@@ -471,6 +487,25 @@
         }
 
         applyConnectionSettings(data.entry);
+        recalledHistoryName = name;
+    }
+
+    async function saveConnectionHistoryFromButton() {
+        if (!recalledHistoryName || connectionHistory.value !== recalledHistoryName) {
+            await saveCurrentConnectionHistory();
+            return;
+        }
+
+        const overwrite = confirm(
+            `The saved setup "${recalledHistoryName}" is currently recalled.\n\n` +
+            "Press OK to overwrite it.\nPress Cancel to save it as a new setup."
+        );
+
+        if (overwrite) {
+            await saveCurrentConnectionHistory(true, recalledHistoryName);
+        } else {
+            await saveCurrentConnectionHistory(false, "");
+        }
     }
 
     protocolSelect.addEventListener("change", updateProtocolDefaults);
@@ -502,7 +537,10 @@
     refreshSerialPorts.addEventListener("click", loadSerialPorts);
     const savedSendRows = loadSendRowsState();
     if (savedSendRows) {
-        setSendFields(savedSendRows);
+        setSendFields(
+            savedSendRows.map(row => row.command),
+            savedSendRows.map(row => row.name)
+        );
     } else {
         document.querySelectorAll(".send-row").forEach(bindSendRow);
         updateRemoveButtons();
@@ -514,8 +552,11 @@
         }
     });
 
-    saveConnectionHistory.addEventListener("click", () => saveCurrentConnectionHistory());
-    connectionHistory.addEventListener("change", loadSelectedConnectionHistory);
+    saveConnectionHistory.addEventListener("click", saveConnectionHistoryFromButton);
+    connectionHistory.addEventListener("change", () => {
+        if (!connectionHistory.value) recalledHistoryName = "";
+        loadSelectedConnectionHistory();
+    });
 
     updateProtocolDefaults();
     loadConnectionHistory();

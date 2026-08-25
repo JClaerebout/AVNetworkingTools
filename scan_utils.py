@@ -1,6 +1,7 @@
 import ipaddress
 import re
 import socket
+import struct
 import sys
 import threading
 import time
@@ -18,6 +19,7 @@ _MAX_HOSTS = 1024
 _SCAN_PING_RETRIES = 2
 _MONITOR_MISSING_AFTER = 3
 _WEB_PORT_TIMEOUT = 0.4
+_SNMP_TIMEOUT = 0.4
 
 _scan_lock = threading.Lock()
 _scan_thread: Optional[threading.Thread] = None
@@ -34,6 +36,7 @@ _last_scan_context = {
     "interface": "",
     "source_ip": "",
     "network": "",
+    "local_network": "",
     "hosts": [],
     "quick_scan": False,
     "completed": False,
@@ -48,6 +51,8 @@ _scan_results: List[Dict] = []
 _monitor_log: List[str] = []
 _vendor_cache = {}
 _vendor_lock = threading.Lock()
+_mdns_cache = {"source_ip": "", "timestamp": 0.0, "names": {}}
+_mdns_lock = threading.Lock()
 
 
 def get_scannable_nics() -> List[Dict]:
@@ -108,6 +113,55 @@ def _ping_host_reliable(source_ip: str, target_ip: str, attempts: int = 2, stop_
         time.sleep(0.08)
 
     return False
+
+
+def _arp_probe(source_ip: str, target_ip: str) -> str:
+    """Actively resolve an on-link IPv4 address to a MAC on Windows."""
+    if sys.platform != "win32":
+        return ""
+
+    try:
+        import ctypes
+
+        destination = struct.unpack("=I", socket.inet_aton(target_ip))[0]
+        source = struct.unpack("=I", socket.inet_aton(source_ip))[0]
+        mac_buffer = ctypes.create_string_buffer(6)
+        mac_length = ctypes.c_ulong(len(mac_buffer))
+        result = ctypes.windll.iphlpapi.SendARP(
+            destination,
+            source,
+            mac_buffer,
+            ctypes.byref(mac_length),
+        )
+    except (AttributeError, OSError, struct.error):
+        return ""
+
+    if result != 0 or mac_length.value != 6:
+        return ""
+
+    return ":".join(f"{byte:02X}" for byte in mac_buffer.raw[:mac_length.value])
+
+
+def _discover_host(
+    source_ip: str,
+    target_ip: str,
+    use_arp: bool,
+    attempts: int = 2,
+    stop_event=None,
+) -> tuple[bool, str]:
+    if stop_event is not None and stop_event.is_set():
+        return False, ""
+
+    if use_arp:
+        mac = _arp_probe(source_ip, target_ip)
+        if mac:
+            return True, mac
+
+    if not _ping_host_reliable(source_ip, target_ip, attempts, stop_event):
+        return False, ""
+
+    return True, _get_arp_entries(source_ip).get(target_ip, "")
+
 
 def _normalize_mac(mac: str) -> str:
     mac = (mac or "").strip().upper().replace("-", ":")
@@ -175,7 +229,305 @@ def _netbios_name(ip: str) -> str:
 
     return ""
 
-def lookup_hostname(ip: str) -> str:
+
+def _windows_resolved_name(ip: str) -> str:
+    """Use the Windows resolver, which can include local name providers."""
+    if sys.platform != "win32":
+        return ""
+
+    code, stdout, _stderr = run_cmd(["ping", "-a", "-n", "1", "-w", "250", ip], timeout=2)
+    if code not in (0, 1):
+        return ""
+
+    bracketed_ip = re.escape(ip)
+    for line in stdout.splitlines():
+        match = re.search(rf"\b([^\s\[\]]+)\s+\[{bracketed_ip}\]", line)
+        if match:
+            return match.group(1).strip().strip(".")
+
+    return ""
+
+
+def _dns_encode_name(name: str) -> bytes:
+    encoded = bytearray()
+    for label in name.rstrip(".").split("."):
+        label_bytes = label.encode("utf-8")
+        if not label_bytes or len(label_bytes) > 63:
+            raise ValueError("Invalid DNS label")
+        encoded.append(len(label_bytes))
+        encoded.extend(label_bytes)
+    encoded.append(0)
+    return bytes(encoded)
+
+
+def _dns_read_name(data: bytes, offset: int) -> tuple[str, int]:
+    labels = []
+    next_offset = None
+    visited = set()
+
+    while True:
+        if offset >= len(data) or offset in visited:
+            raise ValueError("Invalid compressed DNS name")
+        visited.add(offset)
+        length = data[offset]
+
+        if length == 0:
+            offset += 1
+            break
+        if length & 0xC0 == 0xC0:
+            if offset + 1 >= len(data):
+                raise ValueError("Truncated DNS pointer")
+            if next_offset is None:
+                next_offset = offset + 2
+            offset = ((length & 0x3F) << 8) | data[offset + 1]
+            continue
+        if length & 0xC0 or offset + 1 + length > len(data):
+            raise ValueError("Invalid DNS label")
+
+        raw_label = data[offset + 1:offset + 1 + length]
+        labels.append(raw_label.decode("utf-8", errors="replace"))
+        offset += 1 + length
+
+    return ".".join(labels).rstrip("."), next_offset if next_offset is not None else offset
+
+
+def _parse_mdns_packet(data: bytes) -> list[tuple[str, int, object]]:
+    if len(data) < 12:
+        return []
+
+    try:
+        _identifier, _flags, questions, answers, authorities, additionals = struct.unpack("!6H", data[:12])
+        offset = 12
+        for _ in range(questions):
+            _name, offset = _dns_read_name(data, offset)
+            if offset + 4 > len(data):
+                return []
+            offset += 4
+
+        records = []
+        for _ in range(answers + authorities + additionals):
+            name, offset = _dns_read_name(data, offset)
+            if offset + 10 > len(data):
+                return []
+            record_type, _record_class, _ttl, data_length = struct.unpack("!HHIH", data[offset:offset + 10])
+            data_offset = offset + 10
+            end = data_offset + data_length
+            if end > len(data):
+                return []
+
+            value = None
+            if record_type == 1 and data_length == 4:
+                value = socket.inet_ntoa(data[data_offset:end])
+            elif record_type == 12:
+                value, _ = _dns_read_name(data, data_offset)
+            elif record_type == 33 and data_length >= 7:
+                target, _ = _dns_read_name(data, data_offset + 6)
+                value = target
+            elif record_type == 16:
+                fields = {}
+                cursor = data_offset
+                while cursor < end:
+                    field_length = data[cursor]
+                    cursor += 1
+                    if cursor + field_length > end:
+                        break
+                    field = data[cursor:cursor + field_length].decode("utf-8", errors="replace")
+                    cursor += field_length
+                    key, separator, field_value = field.partition("=")
+                    if separator:
+                        fields[key.lower()] = field_value
+                value = fields
+
+            if value is not None:
+                records.append((name, record_type, value))
+            offset = end
+        return records
+    except (OSError, struct.error, ValueError):
+        return []
+
+
+def _mdns_query(names: List[str], source_ip: str, timeout: float) -> list[tuple[str, int, object]]:
+    if not names:
+        return []
+
+    try:
+        packets = [
+            struct.pack("!6H", 0, 0, 1, 0, 0, 0)
+            + _dns_encode_name(name)
+            + struct.pack("!HH", 12, 0x8001)
+            for name in names
+        ]
+    except ValueError:
+        return []
+    records = []
+    deadline = time.monotonic() + timeout
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) as client:
+            client.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_IF, socket.inet_aton(source_ip))
+            client.bind((source_ip, 0))
+            for packet in packets:
+                client.sendto(packet, ("224.0.0.251", 5353))
+
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                client.settimeout(remaining)
+                try:
+                    response, _sender = client.recvfrom(65535)
+                except socket.timeout:
+                    break
+                records.extend(_parse_mdns_packet(response))
+    except OSError:
+        return records
+
+    return records
+
+
+def _friendly_mdns_instance(instance: str, service_type: str) -> str:
+    suffix = "." + service_type.lower().rstrip(".")
+    if instance.lower().endswith(suffix):
+        return instance[:-len(suffix)].strip().strip(".")
+    return instance.split(".", 1)[0].strip()
+
+
+def _discover_mdns_names(source_ip: str) -> Dict[str, str]:
+    if not source_ip:
+        return {}
+
+    with _mdns_lock:
+        now = time.monotonic()
+        if _mdns_cache["source_ip"] == source_ip and now - _mdns_cache["timestamp"] < 60:
+            return dict(_mdns_cache["names"])
+
+        enumeration = _mdns_query(["_services._dns-sd._udp.local"], source_ip, 0.45)
+        service_types = sorted({
+            value for _name, record_type, value in enumeration
+            if record_type == 12 and isinstance(value, str) and value.lower().endswith(".local")
+        })
+        records = list(enumeration)
+        for start in range(0, len(service_types), 20):
+            records.extend(_mdns_query(service_types[start:start + 20], source_ip, 0.35))
+
+        addresses = {}
+        services = {}
+        targets = {}
+        text_fields = {}
+        for name, record_type, value in records:
+            key = name.lower()
+            if record_type == 1:
+                addresses[key] = value
+            elif record_type == 12 and isinstance(value, str):
+                services[value.lower()] = name
+            elif record_type == 33 and isinstance(value, str):
+                targets[key] = value
+            elif record_type == 16 and isinstance(value, dict):
+                text_fields[key] = value
+
+        names_by_ip = {}
+        for instance_key, target in targets.items():
+            ip = addresses.get(target.lower())
+            service_type = services.get(instance_key, "")
+            if not ip or not service_type:
+                continue
+            txt = text_fields.get(instance_key, {})
+            service_name = txt.get("fn") or txt.get("name") or _friendly_mdns_instance(instance_key, service_type)
+            hostname = target.removesuffix(".local").split(".", 1)[0]
+            candidate = (hostname or service_name).replace("\\032", " ").strip().strip(".")
+            if candidate and len(candidate) <= 255:
+                names_by_ip.setdefault(ip, candidate)
+
+        _mdns_cache.update({"source_ip": source_ip, "timestamp": now, "names": names_by_ip})
+        return dict(names_by_ip)
+
+
+def _read_ber_tlv(data: bytes, offset: int = 0) -> tuple[int, bytes, int]:
+    if offset + 2 > len(data):
+        raise ValueError("Truncated BER value")
+
+    tag = data[offset]
+    length_byte = data[offset + 1]
+    offset += 2
+
+    if length_byte & 0x80:
+        length_size = length_byte & 0x7F
+        if not length_size or length_size > 4 or offset + length_size > len(data):
+            raise ValueError("Invalid BER length")
+        length = int.from_bytes(data[offset:offset + length_size], "big")
+        offset += length_size
+    else:
+        length = length_byte
+
+    end = offset + length
+    if end > len(data):
+        raise ValueError("Truncated BER payload")
+
+    return tag, data[offset:end], end
+
+
+def _parse_snmp_sysname(data: bytes) -> str:
+    try:
+        outer_tag, outer, _ = _read_ber_tlv(data)
+        if outer_tag != 0x30:
+            return ""
+
+        offset = 0
+        _version_tag, _version, offset = _read_ber_tlv(outer, offset)
+        _community_tag, _community, offset = _read_ber_tlv(outer, offset)
+        pdu_tag, pdu, _ = _read_ber_tlv(outer, offset)
+        if pdu_tag not in (0xA2, 0xA0):
+            return ""
+
+        offset = 0
+        _request_tag, _request_id, offset = _read_ber_tlv(pdu, offset)
+        _error_tag, error, offset = _read_ber_tlv(pdu, offset)
+        _index_tag, _error_index, offset = _read_ber_tlv(pdu, offset)
+        if int.from_bytes(error, "big") != 0:
+            return ""
+
+        list_tag, varbind_list, _ = _read_ber_tlv(pdu, offset)
+        if list_tag != 0x30:
+            return ""
+        varbind_tag, varbind, _ = _read_ber_tlv(varbind_list)
+        if varbind_tag != 0x30:
+            return ""
+
+        offset = 0
+        oid_tag, oid, offset = _read_ber_tlv(varbind, offset)
+        value_tag, value, _ = _read_ber_tlv(varbind, offset)
+        if oid_tag != 0x06 or oid != bytes.fromhex("2B06010201010500") or value_tag != 0x04:
+            return ""
+    except (TypeError, ValueError):
+        return ""
+
+    name = value.decode("utf-8", errors="replace").replace("\x00", "").strip().strip(".")
+    return name if name and len(name) <= 255 else ""
+
+
+def _snmp_name(ip: str, source_ip: str = "") -> str:
+    # SNMPv2c GET for SNMPv2-MIB::sysName.0 using the conventional read-only community.
+    request = bytes.fromhex(
+        "302902010104067075626C6963A01C020400000001020100020100"
+        "300E300C06082B060102010105000500"
+    )
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as client:
+            client.settimeout(_SNMP_TIMEOUT)
+            if source_ip:
+                client.bind((source_ip, 0))
+            client.sendto(request, (ip, 161))
+            response, sender = client.recvfrom(4096)
+    except OSError:
+        return ""
+
+    if sender[0] != ip:
+        return ""
+    return _parse_snmp_sysname(response)
+
+
+def lookup_hostname(ip: str, source_ip: str = "", mdns_names: Optional[Dict[str, str]] = None) -> str:
     hostname = _reverse_dns(ip)
 
     if hostname:
@@ -185,6 +537,21 @@ def lookup_hostname(ip: str) -> str:
 
     if netbios:
         return netbios
+
+    windows_name = _windows_resolved_name(ip)
+
+    if windows_name:
+        return windows_name
+
+    mdns_name = (mdns_names if mdns_names is not None else _discover_mdns_names(source_ip)).get(ip, "")
+
+    if mdns_name:
+        return mdns_name
+
+    snmp_name = _snmp_name(ip, source_ip)
+
+    if snmp_name:
+        return snmp_name
 
     return ""
 
@@ -206,9 +573,9 @@ def probe_web_services(ip: str, source_ip: str = "") -> List[str]:
     return services
 
 def _lookup_new_monitor_device(ip: str, mac: str) -> None:
-    hostname = lookup_hostname(ip)
     with _scan_lock:
         source_ip = _last_scan_context.get("source_ip", "")
+    hostname = lookup_hostname(ip, source_ip)
     web_services = probe_web_services(ip, source_ip)
 
     _update_result(ip, {
@@ -290,6 +657,45 @@ def _monitor_update_device(ip: str, mac: str, quick_scan: bool) -> bool:
         return True
 
 
+def _monitor_probe_round(
+    source_ip: str,
+    hosts: List[str],
+    local_network,
+    stop_event,
+) -> Dict[str, str]:
+    discovered = {}
+    targets = [ip for ip in hosts if ip != source_ip]
+    workers = min(80, max(8, len(targets)))
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = {
+            executor.submit(
+                _discover_host,
+                source_ip,
+                ip,
+                ipaddress.ip_address(ip) in local_network,
+                2,
+                stop_event,
+            ): ip
+            for ip in targets
+        }
+
+        for future in as_completed(futures):
+            if stop_event.is_set():
+                break
+
+            ip = futures[future]
+            try:
+                alive, mac = future.result()
+            except Exception:
+                continue
+
+            if alive and mac:
+                discovered[ip] = mac
+
+    return discovered
+
+
 def _monitor_worker() -> None:
     global _monitor_running, _monitor_paused, _scan_message
 
@@ -298,10 +704,13 @@ def _monitor_worker() -> None:
         hosts = list(_last_scan_context["hosts"])
         quick_scan = bool(_last_scan_context["quick_scan"])
         network = _last_scan_context["network"]
+        local_network_text = _last_scan_context.get("local_network") or network
 
         _monitor_running = True
         _monitor_paused = False
         _scan_message = f"Monitoring active on {network}..."
+
+    local_network = ipaddress.ip_network(local_network_text, strict=False)
 
     while not _monitor_stop.is_set():
         with _scan_lock:
@@ -315,44 +724,19 @@ def _monitor_worker() -> None:
 
         seen_ips_this_round = set()
 
-        workers = min(80, max(8, len(hosts)))
+        discovered = _monitor_probe_round(source_ip, hosts, local_network, _monitor_stop)
 
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            futures = {
-                executor.submit(_ping_host_reliable, source_ip, ip, 2, _monitor_stop): ip
-                for ip in hosts
-            }
+        for ip, mac in discovered.items():
+            seen_ips_this_round.add(ip)
 
-            for future in as_completed(futures):
-                if _monitor_stop.is_set():
-                    break
+            is_new = _monitor_update_device(ip, mac, quick_scan)
 
-                ip = futures[future]
-
-                try:
-                    alive = future.result()
-                except Exception:
-                    alive = False
-
-                if not alive:
-                    continue
-
-                arp_entries = _get_arp_entries(source_ip)
-                mac = arp_entries.get(ip, "")
-
-                if not mac:
-                    continue
-
-                seen_ips_this_round.add(ip)
-
-                is_new = _monitor_update_device(ip, mac, quick_scan)
-
-                if is_new and not quick_scan:
-                    threading.Thread(
-                        target=_lookup_new_monitor_device,
-                        args=(ip, mac),
-                        daemon=True
-                    ).start()
+            if is_new and not quick_scan:
+                threading.Thread(
+                    target=_lookup_new_monitor_device,
+                    args=(ip, mac),
+                    daemon=True
+                ).start()
 
         with _scan_lock:
             for result in _scan_results:
@@ -555,6 +939,8 @@ def _lookup_worker(reused_quick_scan: bool = False) -> None:
     with _scan_lock:
         _scan_message = f"Local manufacturers loaded. Looking up hostnames and web ports for {len(items)} device(s)..."
 
+    mdns_names = _discover_mdns_names(source_ip)
+
     def lookup_item(item: Dict) -> None:
         global _lookup_done
 
@@ -571,7 +957,7 @@ def _lookup_worker(reused_quick_scan: bool = False) -> None:
                 _lookup_done += 1
             return
 
-        hostname = lookup_hostname(ip)
+        hostname = lookup_hostname(ip, source_ip, mdns_names)
 
         if _scan_stop.is_set():
             return
@@ -640,11 +1026,14 @@ def _scan_worker(interface_name: str, custom_subnet: str = "", quick_scan: bool 
         network = ipaddress.ip_network(nic["network"], strict=False)
 
     hosts = [str(host) for host in network.hosts()]
+    local_network = ipaddress.ip_network(nic["network"], strict=False)
+    scan_targets = [ip for ip in hosts if ip != source_ip]
 
     with _scan_lock:
         _last_scan_context["interface"] = interface_name
         _last_scan_context["source_ip"] = source_ip
         _last_scan_context["network"] = str(network)
+        _last_scan_context["local_network"] = str(local_network)
         _last_scan_context["hosts"] = hosts
         _last_scan_context["quick_scan"] = quick_scan
         _last_scan_context["completed"] = False
@@ -664,7 +1053,7 @@ def _scan_worker(interface_name: str, custom_subnet: str = "", quick_scan: bool 
             _large_scan_quick_only = False
 
     with _scan_lock:
-        _scan_total = len(hosts)
+        _scan_total = len(scan_targets)
         _scan_done = 0
         _scan_message = f"Scanning {network}..."
     
@@ -683,12 +1072,19 @@ def _scan_worker(interface_name: str, custom_subnet: str = "", quick_scan: bool 
             "web_services": [],
         })
 
-    workers = min(100, max(8, len(hosts)))
+    workers = min(100, max(8, len(scan_targets)))
 
     with ThreadPoolExecutor(max_workers=workers) as executor:
         futures = {
-            executor.submit(_ping_host_reliable, source_ip, ip, _SCAN_PING_RETRIES, _scan_stop): ip
-            for ip in hosts
+            executor.submit(
+                _discover_host,
+                source_ip,
+                ip,
+                ipaddress.ip_address(ip) in local_network,
+                _SCAN_PING_RETRIES,
+                _scan_stop,
+            ): ip
+            for ip in scan_targets
         }
 
         for future in as_completed(futures):
@@ -697,9 +1093,10 @@ def _scan_worker(interface_name: str, custom_subnet: str = "", quick_scan: bool 
 
             ip = futures[future]
             alive = False
+            mac = ""
 
             try:
-                alive = future.result()
+                alive, mac = future.result()
             except Exception:
                 alive = False
 
@@ -707,9 +1104,6 @@ def _scan_worker(interface_name: str, custom_subnet: str = "", quick_scan: bool 
                 _scan_done += 1
 
             if alive:
-                arp_entries = _get_arp_entries(source_ip)
-                mac = arp_entries.get(ip, "")
-
                 if mac:
                     _add_result({
                         "ip": ip,

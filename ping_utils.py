@@ -1,5 +1,6 @@
 import ipaddress
 import json
+import re
 import subprocess
 import sys
 import threading
@@ -35,15 +36,33 @@ def save_ping_history_entry(ip: str) -> None:
     PING_HISTORY_FILE.write_text(json.dumps(history, indent=2), encoding="utf-8")
 
 
-def validate_ip(value: str) -> tuple[bool, str]:
+_HOSTNAME_LABEL_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
+
+
+def validate_target(value: str) -> tuple[bool, str]:
     value = value.strip()
     if not value:
-        return False, "IP address is required."
+        return False, "IP address or hostname is required."
+
     try:
         ipaddress.ip_address(value)
         return True, value
     except ValueError:
-        return False, "Invalid IP address. Example: 192.168.1.1"
+        pass
+
+    # A final dot is valid DNS notation, but omit it from the ping command and
+    # history so equivalent hostnames are stored consistently.
+    hostname = value[:-1] if value.endswith(".") else value
+    labels = hostname.split(".")
+    if len(hostname) <= 253 and all(_HOSTNAME_LABEL_RE.fullmatch(label) for label in labels):
+        return True, hostname
+
+    return False, "Invalid IP address or hostname. Example: 192.168.1.1 or switch.local"
+
+
+def validate_ip(value: str) -> tuple[bool, str]:
+    """Backward-compatible alias for callers that used the old validator name."""
+    return validate_target(value)
 
 
 def _ping_command(ip: str) -> List[str]:
@@ -75,7 +94,7 @@ def _append_output(line: str) -> None:
 def start_ping(ip: str) -> tuple[bool, str]:
     global _ping_process, _ping_thread, _ping_target
 
-    valid, value_or_error = validate_ip(ip)
+    valid, value_or_error = validate_target(ip)
     if not valid:
         return False, value_or_error
 

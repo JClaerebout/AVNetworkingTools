@@ -6,17 +6,17 @@
 {% block content %}
 <div class="card">
     <h2>Ping</h2>
-    <p class="desc">Enter an IP address, or select one from the ping history.</p>
+    <p class="desc">Enter an IP address or hostname, or select a previous target from the ping history.</p>
 
     <div class="row">
         <div>
-            <label>IP address</label>
-            <input id="pingIp" data-ip-suggestions placeholder="192.168.1.1" autocomplete="off">
+            <label>IP address or hostname</label>
+            <input id="pingIp" data-ip-suggestions placeholder="192.168.1.1 or switch.local" autocomplete="off">
         </div>
         <div>
             <label>Ping history</label>
             <select id="pingHistory">
-                <option value="">Select previous ping IP...</option>
+                <option value="">Select previous target...</option>
                 {% for ip in ping_history %}
                 <option value="{{ ip }}">{{ ip }}</option>
                 {% endfor %}
@@ -39,7 +39,7 @@
 
 {% block scripts %}
 <script
-    src="{{ url_for('static', filename='ping.js') }}?v=export-confirmation-4"
+    src="{{ url_for('static', filename='ping.js') }}?v=hostname-support-1"
     data-status-url="{{ url_for('main.ping_status') }}"
     data-start-url="{{ url_for('main.ping_start') }}"
     data-stop-url="{{ url_for('main.ping_stop') }}"

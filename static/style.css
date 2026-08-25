@@ -738,6 +738,17 @@ input:focus, select:focus {
     background: var(--accent);
     color: white;
 }
+
+.context-menu button:disabled {
+    color: var(--muted);
+    cursor: default;
+    opacity: 0.65;
+}
+
+.context-menu button:disabled:hover {
+    background: transparent;
+    color: var(--muted);
+}
 .send-rows {
     display: grid;
     gap: 10px;
@@ -745,7 +756,7 @@ input:focus, select:focus {
 
 .send-row {
     display: grid;
-    grid-template-columns: auto 1fr auto auto;
+    grid-template-columns: auto minmax(0, 2fr) minmax(140px, 1fr) auto auto;
     gap: 10px;
     align-items: center;
 }
@@ -775,6 +786,17 @@ input:focus, select:focus {
 
 .send-drag-handle:active {
     cursor: grabbing;
+}
+
+@media (max-width: 640px) {
+    .send-row {
+        grid-template-columns: auto minmax(0, 1fr) auto auto;
+    }
+
+    .send-name-input {
+        grid-column: 2 / 5;
+        grid-row: 2;
+    }
 }
 
 .check-label {

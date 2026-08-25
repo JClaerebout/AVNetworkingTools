@@ -81,6 +81,55 @@ class ScanLookupTests(unittest.TestCase):
         )
         thread.start.assert_called_once_with()
 
+    @patch("scan_utils._ping_host_reliable", return_value=False)
+    @patch("scan_utils._arp_probe", return_value="8C:16:45:E6:7D:E7")
+    def test_on_link_device_is_discovered_when_ping_is_blocked(self, arp_probe, ping_host):
+        alive, mac = scan_utils._discover_host(
+            "192.168.0.10",
+            "192.168.0.25",
+            use_arp=True,
+        )
+
+        self.assertTrue(alive)
+        self.assertEqual(mac, "8C:16:45:E6:7D:E7")
+        arp_probe.assert_called_once_with("192.168.0.10", "192.168.0.25")
+        ping_host.assert_not_called()
+
+    @patch("scan_utils._get_arp_entries", return_value={"10.0.0.25": "AA:BB:CC:DD:EE:FF"})
+    @patch("scan_utils._ping_host_reliable", return_value=True)
+    @patch("scan_utils._arp_probe")
+    def test_remote_device_uses_ping_fallback(self, arp_probe, ping_host, _arp_entries):
+        alive, mac = scan_utils._discover_host(
+            "192.168.0.10",
+            "10.0.0.25",
+            use_arp=False,
+        )
+
+        self.assertTrue(alive)
+        self.assertEqual(mac, "AA:BB:CC:DD:EE:FF")
+        arp_probe.assert_not_called()
+        ping_host.assert_called_once()
+
+    @patch("scan_utils._discover_host", return_value=(True, "8C:16:45:E6:7D:E7"))
+    def test_monitor_uses_arp_capable_discovery_for_local_devices(self, discover_host):
+        stop_event = scan_utils.threading.Event()
+
+        discovered = scan_utils._monitor_probe_round(
+            "192.168.0.10",
+            ["192.168.0.10", "192.168.0.25"],
+            scan_utils.ipaddress.ip_network("192.168.0.0/24"),
+            stop_event,
+        )
+
+        self.assertEqual(discovered, {"192.168.0.25": "8C:16:45:E6:7D:E7"})
+        discover_host.assert_called_once_with(
+            "192.168.0.10",
+            "192.168.0.25",
+            True,
+            2,
+            stop_event,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

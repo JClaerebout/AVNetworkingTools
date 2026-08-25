@@ -6,6 +6,13 @@ from scan_utils import probe_web_services
 
 
 class IpScanWebTests(unittest.TestCase):
+    def test_ip_scan_context_menu_has_detail_copy_actions(self):
+        response = app.test_client().get("/ip-scan")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'id="copyHostnameButton"', response.data)
+        self.assertIn(b'id="copyManufacturerButton"', response.data)
+
     @patch("scan_utils.socket.socket")
     def test_probe_web_services_reports_only_open_ports(self, socket_class):
         connection = MagicMock()
