@@ -4,14 +4,37 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}AVNetworkingTools{% endblock %}</title>
+    <script>
+        (function applySavedThemePreference() {
+            let preference = 'auto';
+            try {
+                const savedPreference = localStorage.getItem('avNetworkingTools:theme');
+                if (['dark', 'light', 'auto'].includes(savedPreference)) preference = savedPreference;
+            } catch (_error) {
+                // Auto remains the default when browser storage is unavailable.
+            }
+
+            const systemTheme = window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            const theme = preference === 'auto' ? systemTheme : preference;
+            document.documentElement.dataset.themePreference = preference;
+            document.documentElement.dataset.theme = theme;
+            document.documentElement.style.colorScheme = theme;
+        })();
+    </script>
     <style>
         html,
         body {
             background: #242424;
             color: #e8e8e8;
         }
+
+        html[data-theme="light"],
+        html[data-theme="light"] body {
+            background: #f3f5f7;
+            color: #1f2933;
+        }
     </style>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=high-dpi-compact-4">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=theme-switch-1">
 </head>
 <body>
 <header>
@@ -28,6 +51,10 @@
             <a class="btn secondary" href="{{ url_for('main.connection_test_page') }}">Connect</a>
             <a class="btn secondary" href="{{ url_for('main.command_line_page') }}">Cmd</a>
             <a class="btn secondary" href="{{ url_for('main.wifi_scan_page') }}">WiFi Scan</a>
+            <button id="themeToggle" class="btn secondary theme-toggle" type="button">
+                <span class="theme-toggle-icon" aria-hidden="true">&#9680;</span>
+                <span class="theme-toggle-label">Theme: Auto</span>
+            </button>
         </nav>
     </div>
 </header>
@@ -56,7 +83,7 @@
 </div>
 
 <script
-    src="{{ url_for('static', filename='app.js') }}?v=ip-suggestions-6"
+    src="{{ url_for('static', filename='app.js') }}?v=theme-switch-2"
     data-ip-scan-status-url="{{ url_for('main.ip_scan_status') }}"
 ></script>
 <script src="{{ url_for('static', filename='updater.js') }}?v=1"></script>

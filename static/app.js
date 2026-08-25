@@ -1,3 +1,69 @@
+// Cycle through persistent dark, light, and system-controlled themes.
+(function enableThemeToggle() {
+    const toggle = document.getElementById('themeToggle');
+    if (!toggle) return;
+
+    const label = toggle.querySelector('.theme-toggle-label');
+    const icon = toggle.querySelector('.theme-toggle-icon');
+    const systemPreference = window.matchMedia?.('(prefers-color-scheme: dark)');
+    const preferences = ['dark', 'light', 'auto'];
+
+    function resolvedSystemTheme() {
+        return systemPreference?.matches ? 'dark' : 'light';
+    }
+
+    function applyPreference(preference, persist = false) {
+        const theme = preference === 'auto' ? resolvedSystemTheme() : preference;
+        const displayPreference = preference[0].toUpperCase() + preference.slice(1);
+        const nextPreference = preferences[(preferences.indexOf(preference) + 1) % preferences.length];
+        const nextDisplayPreference = nextPreference[0].toUpperCase() + nextPreference.slice(1);
+
+        document.documentElement.dataset.themePreference = preference;
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.style.colorScheme = theme;
+        toggle.setAttribute(
+            'aria-label',
+            `Theme is ${displayPreference}${preference === 'auto' ? ` (${theme})` : ''}. Switch to ${nextDisplayPreference}.`
+        );
+        toggle.title = `Click to use ${nextDisplayPreference} theme`;
+        if (label) {
+            label.textContent = preference === 'auto'
+                ? `Theme: Auto (${theme[0].toUpperCase() + theme.slice(1)})`
+                : `Theme: ${displayPreference}`;
+        }
+        if (icon) icon.textContent = preference === 'auto' ? '\u25D0' : theme === 'light' ? '\u2600' : '\u263E';
+
+        if (!persist) return;
+
+        try {
+            localStorage.setItem('avNetworkingTools:theme', preference);
+        } catch (_error) {
+            // The preference still works for this page when browser storage is unavailable.
+        }
+    }
+
+    const initialPreference = preferences.includes(document.documentElement.dataset.themePreference)
+        ? document.documentElement.dataset.themePreference
+        : 'auto';
+    applyPreference(initialPreference);
+
+    toggle.addEventListener('click', () => {
+        const currentPreference = document.documentElement.dataset.themePreference || 'dark';
+        const nextPreference = preferences[(preferences.indexOf(currentPreference) + 1) % preferences.length];
+        applyPreference(nextPreference, true);
+    });
+
+    const handleSystemThemeChange = () => {
+        if (document.documentElement.dataset.themePreference === 'auto') applyPreference('auto');
+    };
+
+    if (systemPreference?.addEventListener) {
+        systemPreference.addEventListener('change', handleSystemThemeChange);
+    } else if (systemPreference?.addListener) {
+        systemPreference.addListener(handleSystemThemeChange);
+    }
+})();
+
 // Offer devices from the most recent IP scan without restricting manual IP entry.
 (function enableLastScanIpSuggestions() {
     const inputs = document.querySelectorAll('[data-ip-suggestions]');
