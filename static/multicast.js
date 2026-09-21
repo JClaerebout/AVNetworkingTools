@@ -112,12 +112,13 @@
         try {
             const response = await fetch(urls.exportUrl, {method: "POST"});
             const data = await response.json();
+            if (data.cancelled) { exportStatus.textContent = ""; return; }
             if (!response.ok || !data.success) {
                 alert(data.message || "Could not save multicast report.");
                 exportStatus.textContent = "";
                 return;
             }
-            exportStatus.textContent = `Saved ${data.filename} to Downloads.`;
+            exportStatus.textContent = `Saved ${data.filename} to your selected file.`;
         } catch (error) {
             alert(`Could not save multicast report: ${error.message}`);
             exportStatus.textContent = "";

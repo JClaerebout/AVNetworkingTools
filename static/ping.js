@@ -16,7 +16,7 @@
 
     function showExportSuccess() {
         clearTimeout(exportStatusTimer);
-        exportStatus.textContent = "Saved to Downloads.";
+        exportStatus.textContent = "Saved to your selected file.";
         exportStatus.classList.add("success");
         exportStatusTimer = setTimeout(() => {
             exportStatus.textContent = "";
@@ -82,6 +82,7 @@
         try {
             const response = await fetch(urls.exportUrl, {method: "POST"});
             const data = await response.json();
+            if (data.cancelled) { return; }
             if (!response.ok || !data.success) {
                 alert(data.message || "Could not save TXT.");
                 return;

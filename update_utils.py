@@ -73,7 +73,7 @@ def check_for_update():
     release = _read_json(LATEST_RELEASE_URL)
     tag = str(release.get("tag_name", "")).strip()
     asset = _select_executable_asset(release.get("assets", []))
-    available = is_newer_version(tag)
+    available = is_newer_version(tag, APP_VERSION)
 
     result = {
         "available": available,

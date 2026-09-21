@@ -177,6 +177,7 @@
     }
 
     function restoreField(field) {
+        if (field.closest(".priority-form")) return;
         const state = savedFields[fieldKey(field)];
         if (!state) return;
 
@@ -280,10 +281,11 @@ function showOperationNotice(message, category = 'info') {
     notice.className = `flash ${category}`;
     notice.textContent = message;
     notice.hidden = false;
-    notice.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    notice.parentElement.querySelectorAll('.flash:not(#operationNotice)').forEach(item => item.remove());
 }
 
 function operationMessage(form) {
+    if (form.classList.contains('priority-form')) return 'Updating IPv4 priority...';
     if (form.id.startsWith('release-')) return 'Releasing DHCP lease...';
     if (form.id.startsWith('renew-')) return 'Renewing DHCP lease...';
 
@@ -330,9 +332,10 @@ function showResponseNotice(responseHtml) {
     }
 }
 
-document.querySelectorAll('.config-form, form[id^="release-"], form[id^="renew-"]').forEach(form => {
+document.querySelectorAll('.config-form, .priority-form, form[id^="release-"], form[id^="renew-"]').forEach(form => {
     form.addEventListener('submit', event => {
         event.preventDefault();
+        if (form.closest('.nic-card')?.classList.contains('is-busy')) return;
         const message = operationMessage(form);
         const busyCard = showNicBusyOverlay(form, message);
         showOperationNotice(message);
@@ -351,6 +354,8 @@ document.querySelectorAll('.config-form, form[id^="release-"], form[id^="renew-"
                 delete form.dataset.modeChangePending;
             }
             hideNicBusyOverlay(busyCard);
+            if (operationSucceeded) startNicRefreshBurst();
+            else if (form.classList.contains('priority-form')) refreshNicStatus();
         };
         request.onerror = () => {
             hideNicBusyOverlay(busyCard);
@@ -360,43 +365,89 @@ document.querySelectorAll('.config-form, form[id^="release-"], form[id^="renew-"
     });
 });
 
-const autoRefresh = document.getElementById('autoRefresh');
+let nicRefreshInFlight = false;
+let nicBurstRemaining = 0;
+let nicBurstTimer;
+let nicBurstGeneration = 0;
 
-if (autoRefresh) {
-    const saved = localStorage.getItem('autoRefreshEnabled');
-
-    if (saved === null) {
-        autoRefresh.checked = true;
-        localStorage.setItem('autoRefreshEnabled', 'true');
-    } else {
-        autoRefresh.checked = saved === 'true';
+async function refreshNicStatus() {
+    if (document.hidden || nicRefreshInFlight || document.querySelector('.nic-card.is-busy') ||
+        document.body.dataset.updateInProgress === 'true') return;
+    nicRefreshInFlight = true;
+    try {
+        const response = await fetch('/nics/status', {cache: 'no-store'});
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || 'Could not refresh NICs.');
+        // A network operation may have started while the status request was running.
+        if (document.querySelector('.nic-card.is-busy')) return;
+        for (const nic of data.nics) {
+            const card = Array.from(document.querySelectorAll('.nic-card'))
+                .find(item => item.dataset.interfaceIndex === String(nic.if_index));
+            if (!card) continue;
+            const status = card.querySelector('.status');
+            status.className = `status ${nic.status}`;
+            status.textContent = nic.status;
+            const values = [nic.ip, nic.subnet, nic.gateway, (nic.dns || []).join(', '), nic.dhcp_raw, nic.link_status, nic.mac];
+            card.querySelectorAll('.details > div:not(.label)').forEach((element, index) => {
+                element.textContent = values[index] || '-';
+            });
+            const priority = card.querySelector('.priority-select');
+            if (priority) {
+                const value = nic.automatic_metric ? 'auto' : String(nic.metric ?? '');
+                let option = Array.from(priority.options).find(item => item.value === value);
+                priority.querySelectorAll('option[data-current], option[value=""]').forEach(item => item.remove());
+                if (!option || !option.isConnected) {
+                    option = document.createElement('option');
+                    option.value = value;
+                    option.textContent = nic.metric == null ? 'Unknown' : String(nic.metric);
+                    option.disabled = true;
+                    option.dataset.current = 'true';
+                    priority.prepend(option);
+                }
+                priority.value = value;
+            }
+            card.querySelectorAll('.dhcp-action').forEach(button => { button.hidden = nic.dhcp_raw !== 'Enabled'; });
+        }
+    } catch (error) {
+        // Keep the operation result visible even if a later status refresh fails.
+        const control = document.getElementById('autoRefresh');
+        if (control) control.title = error.message;
+    } finally {
+        nicRefreshInFlight = false;
     }
-
-    autoRefresh.addEventListener('change', () => {
-        localStorage.setItem('autoRefreshEnabled', autoRefresh.checked ? 'true' : 'false');
-    });
-
-    function hasUnappliedModeChange() {
-        return Boolean(document.querySelector('.config-form[data-mode-change-pending="true"]'));
-    }
-
-    setInterval(() => {
-
-        const nicPage =
-            window.location.pathname === "/" ||
-            window.location.pathname === "";
-
-        if (!nicPage)
-            return;
-
-        if (hasUnappliedModeChange())
-            return;
-
-        if (document.body.dataset.updateInProgress === 'true')
-            return;
-
-        if (autoRefresh.checked)
-            window.location.reload();
-
-    }, 15000);
+    return true;
 }
+
+function startNicRefreshBurst() {
+    clearTimeout(nicBurstTimer);
+    const generation = ++nicBurstGeneration;
+    nicBurstRemaining = 6;
+    async function tick() {
+        if (!document.hidden) {
+            const refreshed = await refreshNicStatus();
+            if (generation !== nicBurstGeneration) return;
+            if (refreshed) nicBurstRemaining--;
+        }
+        if (nicBurstRemaining > 0) nicBurstTimer = setTimeout(tick, 2000);
+    }
+    tick();
+}
+
+const autoRefresh = document.getElementById('autoRefresh');
+if (autoRefresh) {
+    try { autoRefresh.checked = localStorage.getItem('autoRefreshEnabled') !== 'false'; }
+    catch (_) { autoRefresh.checked = true; }
+    autoRefresh.addEventListener('change', () => {
+        try { localStorage.setItem('autoRefreshEnabled', String(autoRefresh.checked)); } catch (_) {}
+    });
+    setInterval(() => {
+        if (autoRefresh.checked && nicBurstRemaining === 0) refreshNicStatus();
+    }, 10000);
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && autoRefresh.checked) refreshNicStatus();
+    });
+}
+
+document.querySelectorAll('.priority-select').forEach(select => {
+    select.addEventListener('change', () => select.form.requestSubmit());
+});

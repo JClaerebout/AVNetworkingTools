@@ -34,11 +34,11 @@
             color: #1f2933;
         }
     </style>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=header-nav-1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=compact-2">
 </head>
 <body>
 {% set current_endpoint = request.endpoint or '' %}
-{% set more_endpoints = ['main.scripts_page', 'main.command_line_page', 'main.multicast_page', 'main.wifi_scan_page'] %}
+{% set more_endpoints = ['main.scripts_page', 'main.command_line_page', 'main.multicast_page', 'main.wifi_scan_page', 'main.converter_page'] %}
 <header>
     <div class="header-inner">
         <div class="header-copy">
@@ -60,6 +60,7 @@
                 <details class="more-nav">
                     <summary class="nav-link{% if current_endpoint in more_endpoints %} active{% endif %}">More <span aria-hidden="true">&#9662;</span></summary>
                     <div class="more-nav-menu">
+                        <a class="nav-link{% if current_endpoint == 'main.converter_page' %} active{% endif %}" href="{{ url_for('main.converter_page') }}">Converter</a>
                         <a class="nav-link{% if current_endpoint == 'main.scripts_page' %} active{% endif %}" href="{{ url_for('main.scripts_page') }}"{% if current_endpoint == 'main.scripts_page' %} aria-current="page"{% endif %}>Scripts</a>
                         <a class="nav-link{% if current_endpoint == 'main.command_line_page' %} active{% endif %}" href="{{ url_for('main.command_line_page') }}"{% if current_endpoint == 'main.command_line_page' %} aria-current="page"{% endif %}>Command Line</a>
                         <a class="nav-link{% if current_endpoint == 'main.multicast_page' %} active{% endif %}" href="{{ url_for('main.multicast_page') }}"{% if current_endpoint == 'main.multicast_page' %} aria-current="page"{% endif %}>Multicast</a>

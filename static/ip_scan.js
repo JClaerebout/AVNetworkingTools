@@ -281,9 +281,13 @@
         openWebpageButton.textContent = scheme
             ? `Open webpage (${scheme.toUpperCase()})`
             : "Open webpage";
-        contextMenu.style.left = `${x}px`;
-        contextMenu.style.top = `${y}px`;
         contextMenu.style.display = "block";
+        const margin = 8;
+        contextMenu.style.maxHeight = `${window.innerHeight - margin * 2}px`;
+        contextMenu.style.overflowY = "auto";
+        const bounds = contextMenu.getBoundingClientRect();
+        contextMenu.style.left = `${Math.max(margin, Math.min(x, window.innerWidth - bounds.width - margin))}px`;
+        contextMenu.style.top = `${Math.max(margin, Math.min(y, window.innerHeight - bounds.height - margin))}px`;
     }
 
     function isCopyableDetail(value) {
@@ -326,6 +330,7 @@
                 body: JSON.stringify({ip, scheme})
             });
             const data = await response.json();
+            if (data.cancelled) { return; }
             if (!response.ok || !data.success) {
                 alert(data.message || "Could not open webpage.");
             }
@@ -347,11 +352,12 @@
                 body: JSON.stringify({results: visibleResults})
             });
             const data = await response.json();
+            if (data.cancelled) { return; }
             if (!response.ok || !data.success) {
                 alert(data.message || "Could not save CSV.");
                 return;
             }
-            showExportSuccess(`Saved ${data.count} visible result${data.count === 1 ? "" : "s"} to Downloads.`);
+            showExportSuccess(`Saved ${data.count} visible result${data.count === 1 ? "" : "s"} to your selected file.`);
         } catch (error) {
             alert(`Could not save CSV: ${error.message}`);
         } finally {
@@ -364,11 +370,12 @@
         try {
             const response = await fetch(urls.monitorExportUrl, {method: "POST"});
             const data = await response.json();
+            if (data.cancelled) { return; }
             if (!response.ok || !data.success) {
                 alert(data.message || "Could not save monitor log.");
                 return;
             }
-            showExportSuccess(`Saved monitor log (${data.count} entries) to Downloads.`);
+            showExportSuccess(`Saved monitor log (${data.count} entries) to your selected file.`);
         } catch (error) {
             alert(`Could not save monitor log: ${error.message}`);
         } finally {

@@ -9,7 +9,7 @@ from flask import Blueprint, Response, flash, jsonify, redirect, render_template
 
 from history import load_history
 from ping_utils import get_ping_status, load_ping_history, start_ping, stop_ping
-from nic_utils import clean_dns, get_nics, release_dhcp, renew_dhcp, set_dhcp, set_static
+from nic_utils import clean_dns, get_nics, release_dhcp, renew_dhcp, set_dhcp, set_static, set_interface_metric
 from scan_utils import get_monitor_log, get_scannable_nics, get_scan_status, start_lookup, start_scan, stop_scan, start_monitor, stop_monitor, set_monitor_paused
 from connection_utils import get_connection_status, get_serial_ports, send_data, start_connection, stop_connection
 from system_utils import is_admin
@@ -20,7 +20,7 @@ from connection_history import (
     save_connection_history_entry,
 )
 from command_utils import run_command
-from config import DOWNLOADS_DIR
+from export_utils import SaveCancelled, save_export
 from update_utils import check_for_update, get_update_state, install_downloaded_update, start_update_download
 from multicast_utils import get_multicast_status, start_multicast_test, stop_multicast_test
 from script_utils import get_script_status, set_script_paused, start_script, stop_script
@@ -92,6 +92,28 @@ def apply_settings():
     return redirect(url_for("main.index"))
 
 
+@main_bp.route("/nics/status")
+def nic_status():
+    try:
+        return jsonify({"nics": get_nics()})
+    except Exception as exc:
+        return jsonify({"message": f"Could not refresh NICs: {exc}"}), 500
+
+
+@main_bp.route("/nics/priority", methods=["POST"])
+def nic_priority():
+    success, message = set_interface_metric(
+        request.form.get("interface_index"), request.form.get("metric", "")
+    )
+    flash(message, "success" if success else "error")
+    return redirect(url_for("main.index"))
+
+
+@main_bp.route("/converter")
+def converter_page():
+    return render_template("converter.html")
+
+
 @main_bp.route("/release", methods=["POST"])
 def dhcp_release():
     interface_name = request.form.get("interface", "").strip()
@@ -141,14 +163,12 @@ def ping_status():
 
 
 def _save_download(filename, content):
-    DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
-    destination = DOWNLOADS_DIR / filename
-    counter = 2
-    while destination.exists():
-        destination = DOWNLOADS_DIR / f"{Path(filename).stem}-{counter}{Path(filename).suffix}"
-        counter += 1
-    destination.write_bytes(content.encode("utf-8"))
-    return destination.resolve()
+    return save_export(filename, content)
+
+
+@main_bp.errorhandler(SaveCancelled)
+def save_cancelled(_error):
+    return jsonify({"success": False, "cancelled": True, "message": "Save cancelled."})
 
 
 @main_bp.route("/ping/export.txt", methods=["GET", "POST"])
@@ -163,7 +183,7 @@ def ping_export():
             destination = _save_download(filename, content + "\r\n")
         except OSError as exc:
             return jsonify({"success": False, "message": f"Could not save TXT: {exc}"}), 500
-        return jsonify({"success": True, "filename": filename, "path": str(destination)})
+        return jsonify({"success": True, "filename": destination.name, "path": str(destination)})
 
     return Response(
         content + "\r\n",
@@ -334,7 +354,7 @@ def connection_test_export():
             return jsonify({"success": False, "message": f"Could not save TXT: {exc}"}), 500
         return jsonify({
             "success": True,
-            "filename": filename,
+            "filename": destination.name,
             "path": str(destination),
             "count": len(output),
         })
@@ -473,7 +493,7 @@ def ip_scan_export():
             return jsonify({"success": False, "message": f"Could not save CSV: {exc}"}), 500
         return jsonify({
             "success": True,
-            "filename": filename,
+            "filename": destination.name,
             "path": str(destination),
             "count": len(results),
         })
@@ -515,7 +535,7 @@ def ip_scan_monitor_export():
             return jsonify({"success": False, "message": f"Could not save monitor log: {exc}"}), 500
         return jsonify({
             "success": True,
-            "filename": filename,
+            "filename": destination.name,
             "path": str(destination),
             "count": len(lines),
         })
@@ -655,7 +675,7 @@ def multicast_export():
         return jsonify({"success": False, "message": f"Could not save multicast report: {exc}"}), 500
     return jsonify({
         "success": True,
-        "filename": filename,
+        "filename": destination.name,
         "path": str(destination),
         "groups": len(status.get("groups", [])),
     })

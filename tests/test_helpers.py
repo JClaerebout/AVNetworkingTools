@@ -122,8 +122,12 @@ class HelperTests(unittest.TestCase):
         self.assertEqual(main["severity"], "warn")
         self.assertEqual(main["severity_label"], "Warning")
         self.assertIn("other AP radio(s) sharing channel 6", main["reason"])
-        self.assertEqual(overlap["severity"], "danger")
+        self.assertEqual(overlap["severity"], "warn")
         self.assertIn("not 1, 6 or 11", overlap["reason"])
+
+        results[2]["signal_percent"] = 80
+        strong_overlap = next(item for item in _analyze_conflicts(results) if item["ssid"] == "Overlap")
+        self.assertEqual(strong_overlap["severity"], "danger")
 
     def test_wifi_conflict_analysis_does_not_merge_bssids_with_same_tail(self):
         results = [

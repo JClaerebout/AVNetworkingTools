@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block subtitle %}Convert ASCII text, hexadecimal bytes and decimal bytes.{% endblock %}
+{% block content %}
+<div class="card">
+    <h2>Converter</h2>
+    <p class="desc">Edit any field to convert between ASCII, hex and decimal.</p>
+    <div class="converter-fields">
+    <div>
+    <label for="converterAscii">ASCII text</label>
+    <textarea id="converterAscii" rows="7" spellcheck="false" placeholder="Hello\r"></textarea>
+    </div>
+    <div>
+    <label for="converterHex">Hexadecimal bytes</label>
+    <textarea id="converterHex" rows="7" spellcheck="false" placeholder="48 65 6C 6C 6F 0D"></textarea>
+    </div>
+    <div>
+    <label for="converterDecimal">Decimal bytes</label>
+    <textarea id="converterDecimal" rows="7" spellcheck="false" placeholder="72 101 108 108 111 13"></textarea>
+    </div>
+    </div>
+    <div id="converterStatus" class="scan-status converter-status" role="status">Ready</div>
+    <details class="converter-help">
+        <summary>Formats and escape sequences</summary>
+        <p>ASCII: characters 0–127. Use \r, \n, \t or \xNN for control bytes and \\ for a backslash. Hex and decimal: bytes 0–255 separated by spaces or commas. Hex also accepts continuous byte pairs.</p>
+    </details>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='converter.js') }}"></script>{% endblock %}

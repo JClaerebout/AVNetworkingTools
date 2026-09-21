@@ -201,13 +201,14 @@
         try {
             const response = await fetch(urls.exportUrl, {method: "POST"});
             const data = await response.json();
+            if (data.cancelled) { return; }
             if (!response.ok || !data.success) {
                 alert(data.message || "Could not export connection session.");
                 return;
             }
 
             resetExportStatus();
-            exportStatus.textContent = "Saved to Downloads.";
+            exportStatus.textContent = "Saved to your selected file.";
             exportStatus.classList.add("success");
             exportStatusTimer = setTimeout(resetExportStatus, 4000);
         } catch (error) {

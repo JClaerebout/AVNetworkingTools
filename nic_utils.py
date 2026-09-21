@@ -92,6 +92,7 @@ def sort_nics(nics: List[Dict]) -> List[Dict]:
 
 def get_nics() -> List[Dict]:
     wmi = get_wmi()
+    metrics = get_interface_metrics()
 
     adapters = wmi.ExecQuery(
         "SELECT * FROM Win32_NetworkAdapter WHERE NetConnectionID IS NOT NULL"
@@ -162,6 +163,7 @@ def get_nics() -> List[Dict]:
             "name": name,
             "description": adapter.Description or "",
             "if_index": adapter.InterfaceIndex,
+            **metrics.get(int(adapter.InterfaceIndex), {}),
             "mac": adapter.MACAddress or "",
             "link_status": "Up" if connected else "Disconnected",
             "admin_status": "",
@@ -177,6 +179,42 @@ def get_nics() -> List[Dict]:
         })
 
     return sort_nics(nics)
+
+
+def get_interface_metrics():
+    code, stdout, _ = run_powershell(
+        "Get-NetIPInterface -AddressFamily IPv4 -ErrorAction Stop | "
+        "Select-Object InterfaceIndex,InterfaceMetric,AutomaticMetric | ConvertTo-Json -Compress"
+    )
+    if code != 0:
+        return {}
+    try:
+        rows = json.loads(stdout)
+        if isinstance(rows, dict):
+            rows = [rows]
+        return {int(row["InterfaceIndex"]): {
+            "metric": int(row["InterfaceMetric"]),
+            "automatic_metric": str(row["AutomaticMetric"]).lower() in {"1", "enabled", "true"},
+        } for row in (rows or [])}
+    except (ValueError, KeyError, TypeError):
+        return {}
+
+
+def set_interface_metric(interface_index, metric):
+    try:
+        index = int(interface_index)
+        if index <= 0:
+            raise ValueError()
+        value = None if metric == "auto" else int(metric)
+        if value is not None and not 1 <= value <= 9999:
+            raise ValueError()
+    except (ValueError, TypeError):
+        return False, "Choose automatic priority or a metric from 1 to 9999."
+    setting = "-AutomaticMetric Enabled" if value is None else f"-AutomaticMetric Disabled -InterfaceMetric {value}"
+    code, stdout, stderr = run_powershell(
+        f"Set-NetIPInterface -InterfaceIndex {index} -AddressFamily IPv4 {setting} -ErrorAction Stop"
+    )
+    return (False, stderr or stdout or "Could not set interface priority.") if code else (True, "IPv4 interface priority updated.")
 
 
 def set_dhcp(interface_name: str) -> tuple[bool, str]:

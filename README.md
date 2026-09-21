@@ -1,6 +1,6 @@
 # AVNetworkingTools
 
-Current release: **V1.2.0**
+Current release: **V1.4.0**
 
 AVNetworkingTools — Network tools for AV commissioning.
 A Windows toolbox for AV integrators and programmers to quickly configure network adapters, discover devices, test connections and troubleshoot systems during commissioning.
@@ -22,6 +22,8 @@ The application opens its own desktop window and runs locally at `http://127.0.0
 
 - View connected and disconnected network adapters.
 - Switch adapters between DHCP and static IPv4 configurations.
+- Refresh NIC status every 10 seconds while the page is visible, with six faster refreshes after network changes.
+- Read and set IPv4 adapter priority using automatic or manual interface metrics.
 - Reuse saved network configurations from local history.
 - Run quick IP/MAC scans or complete scans with manufacturer and hostname data.
 - Enrich an existing quick scan with **Lookup details** without rescanning.
@@ -29,6 +31,8 @@ The application opens its own desktop window and runs locally at `http://127.0.0
 - Refresh the local IEEE database weekly in the background while retaining the last valid copy when offline.
 - Monitor discovered devices for missing hosts and duplicate-IP conflicts.
 - Export IP-scan results to CSV and ping output to text.
+- Choose export destinations with the desktop application's native Save As dialog.
+- Convert ASCII text, hexadecimal bytes and decimal bytes from More > Converter.
 - Run continuous ping tests with saved history.
 - Build, save and run multi-device TCP, UDP, Telnet or SSH command scripts.
 - Inspect Wi-Fi SSIDs, channels, signal levels, channel load and conflicts.
@@ -36,6 +40,12 @@ The application opens its own desktop window and runs locally at `http://127.0.0
 - Test TCP, UDP, SSH and serial connections using saved presets.
 - Run local command-line diagnostics from the application.
 - Check for, download and install integrity-checked GitHub release updates.
+
+## NIC priority and exports
+
+NIC priority uses the Windows IPv4 interface metric. Lower values prefer an interface for otherwise equivalent routes; Windows adds the route metric when selecting a route. This does not test internet availability or configure IPv6 priority. See [Microsoft's interface metric documentation](https://learn.microsoft.com/en-us/windows-server/networking/technologies/network-subsystem/net-sub-interface-metric).
+
+Exports use the desktop window's Save As dialog; cancelling leaves files untouched. Launch with `python app.py` or the packaged EXE to use this dialog. Browser-only hosting has no desktop dialog.
 
 ## IP scan and manufacturer lookup
 

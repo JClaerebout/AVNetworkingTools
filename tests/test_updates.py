@@ -14,6 +14,7 @@ class UpdateTests(unittest.TestCase):
         self.assertFalse(update_utils.is_newer_version("0.9.9", "1.0.0"))
         self.assertFalse(update_utils.is_newer_version("latest", "1.0.0"))
 
+    @patch("update_utils.APP_VERSION", "1.2.0")
     @patch("update_utils.sys.frozen", True, create=True)
     @patch("update_utils._read_json")
     def test_check_for_update_selects_release_exe(self, read_json):
@@ -32,6 +33,7 @@ class UpdateTests(unittest.TestCase):
         self.assertEqual(result["latest_version"], "1.3.0")
         self.assertNotIn("error", result)
 
+    @patch("update_utils.APP_VERSION", "1.2.0")
     @patch("update_utils._read_json")
     def test_check_rejects_release_without_supported_exe(self, read_json):
         read_json.return_value = {

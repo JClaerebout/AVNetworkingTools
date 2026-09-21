@@ -45,8 +45,8 @@ class ConnectionExportTests(unittest.TestCase):
         self.assertFalse(response.get_json()["success"])
 
     @patch("routes.get_connection_status", return_value={"output": ["Connected"]})
-    def test_post_saves_connection_txt_in_downloads_folder(self, _get_connection_status):
-        with tempfile.TemporaryDirectory() as temp_dir, patch("routes.DOWNLOADS_DIR", Path(temp_dir)):
+    def test_post_saves_connection_txt_in_selected_location(self, _get_connection_status):
+        with tempfile.TemporaryDirectory() as temp_dir, patch("export_utils.choose_save_path", side_effect=lambda filename: Path(temp_dir) / filename):
             response = app.test_client().post("/connection-test/export.txt")
             data = response.get_json()
             saved_path = Path(data["path"])

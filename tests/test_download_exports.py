@@ -8,10 +8,10 @@ from app import app
 
 class DownloadExportTests(unittest.TestCase):
     @patch("routes.get_ping_status")
-    def test_ping_post_saves_txt_in_downloads_folder(self, get_ping_status):
+    def test_ping_post_saves_txt_in_selected_location(self, get_ping_status):
         get_ping_status.return_value = {"output": ["Reply from 192.168.1.1"]}
 
-        with tempfile.TemporaryDirectory() as temp_dir, patch("routes.DOWNLOADS_DIR", Path(temp_dir)):
+        with tempfile.TemporaryDirectory() as temp_dir, patch("export_utils.choose_save_path", side_effect=lambda filename: Path(temp_dir) / filename):
             response = app.test_client().post("/ping/export.txt")
             data = response.get_json()
             saved_path = Path(data["path"])
@@ -30,7 +30,7 @@ class DownloadExportTests(unittest.TestCase):
             "missing": False,
         }]
 
-        with tempfile.TemporaryDirectory() as temp_dir, patch("routes.DOWNLOADS_DIR", Path(temp_dir)):
+        with tempfile.TemporaryDirectory() as temp_dir, patch("export_utils.choose_save_path", side_effect=lambda filename: Path(temp_dir) / filename):
             response = app.test_client().post(
                 "/ip-scan/export.csv",
                 json={"results": visible_results},
@@ -74,7 +74,7 @@ class DownloadExportTests(unittest.TestCase):
             "warnings": [{"severity": "danger", "message": "Multicast flooding suspected."}],
         }
 
-        with tempfile.TemporaryDirectory() as temp_dir, patch("routes.DOWNLOADS_DIR", Path(temp_dir)):
+        with tempfile.TemporaryDirectory() as temp_dir, patch("export_utils.choose_save_path", side_effect=lambda filename: Path(temp_dir) / filename):
             response = app.test_client().post("/multicast/export.txt")
             data = response.get_json()
             content = Path(data["path"]).read_text(encoding="utf-8")
@@ -92,13 +92,13 @@ class DownloadExportTests(unittest.TestCase):
         self.assertFalse(response.get_json()["success"])
 
     @patch("routes.get_monitor_log")
-    def test_monitor_log_post_saves_txt_in_downloads_folder(self, get_monitor_log):
+    def test_monitor_log_post_saves_txt_in_selected_location(self, get_monitor_log):
         get_monitor_log.return_value = [
             "[2026-08-24 16:00:00] Monitoring started.",
             "[2026-08-24 16:01:00] MISSING 192.168.1.20 (AA:BB:CC:DD:EE:FF)",
         ]
 
-        with tempfile.TemporaryDirectory() as temp_dir, patch("routes.DOWNLOADS_DIR", Path(temp_dir)):
+        with tempfile.TemporaryDirectory() as temp_dir, patch("export_utils.choose_save_path", side_effect=lambda filename: Path(temp_dir) / filename):
             response = app.test_client().post("/ip-scan/monitor/export.txt")
             data = response.get_json()
             saved_path = Path(data["path"])

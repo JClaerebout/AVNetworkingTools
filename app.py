@@ -60,8 +60,8 @@ if __name__ == "__main__":
     webview.create_window(
         "AVNetworkingTools",
         f"http://127.0.0.1:{DEFAULT_PORT}",
-        width=1500,
-        height=950,
+        width=1280,
+        height=800,
         resizable=True,
         text_select=True,
         background_color="#242424",

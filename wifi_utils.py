@@ -308,7 +308,8 @@ def _parse_netsh(output):
         if current_bssid and channel_match:
             channel = _parse_channel(channel_match.group(1))
             current_bssid["channel"] = channel
-            current_bssid["band"] = _channel_to_band(channel)
+            if current_bssid["band"] == "unknown":
+                current_bssid["band"] = _channel_to_band(channel)
             continue
 
         stations_match = re.match(r"^Connected Stations\s*:\s*(\d+).*$", line, re.IGNORECASE)
