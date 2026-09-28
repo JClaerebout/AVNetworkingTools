@@ -18,11 +18,36 @@
     const loadButton = document.getElementById("loadScript");
     const deleteButton = document.getElementById("deleteScript");
     const saveStatus = document.getElementById("scriptSaveStatus");
+    const reorderStatus = document.getElementById("scriptReorderStatus");
     const storageKey = "avNetworkingTools:scriptDraft:v1";
     let draggedBlock = null;
+    let scriptRunning = false;
 
     function updateEmptyState() {
         emptyState.hidden = canvas.children.length > 0;
+    }
+
+    function updateMoveButtons() {
+        Array.from(canvas.children).forEach((block, index, blocks) => {
+            block.querySelector(".script-move-up").disabled = scriptRunning || index === 0;
+            block.querySelector(".script-move-down").disabled = scriptRunning || index === blocks.length - 1;
+            block.querySelector(".script-remove").disabled = scriptRunning;
+        });
+    }
+
+    function moveBlock(block, direction) {
+        if (scriptRunning) return;
+        const neighbor = direction === "up" ? block.previousElementSibling : block.nextElementSibling;
+        if (!neighbor) return;
+        if (direction === "up") canvas.insertBefore(block, neighbor);
+        else canvas.insertBefore(neighbor, block);
+        updateMoveButtons();
+        saveDraft();
+        const button = block.querySelector(direction === "up" ? ".script-move-up" : ".script-move-down");
+        const other = block.querySelector(direction === "up" ? ".script-move-down" : ".script-move-up");
+        (button.disabled ? other : button).focus();
+        const position = Array.from(canvas.children).indexOf(block) + 1;
+        reorderStatus.textContent = `Moved ${block.dataset.type} block to position ${position} of ${canvas.children.length}.`;
     }
 
     function updateTargetFields(block) {
@@ -33,11 +58,16 @@
 
     function bindBlock(block) {
         block.querySelector(".script-remove").addEventListener("click", () => {
+            if (scriptRunning) return;
             block.remove();
             updateEmptyState();
+            updateMoveButtons();
             saveDraft();
         });
+        block.querySelector(".script-move-up").addEventListener("click", () => moveBlock(block, "up"));
+        block.querySelector(".script-move-down").addEventListener("click", () => moveBlock(block, "down"));
         block.addEventListener("dragstart", event => {
+            if (scriptRunning) { event.preventDefault(); return; }
             draggedBlock = block;
             block.classList.add("is-dragging");
             event.dataTransfer.effectAllowed = "move";
@@ -46,6 +76,7 @@
         block.addEventListener("dragend", () => {
             block.classList.remove("is-dragging");
             draggedBlock = null;
+            updateMoveButtons();
             saveDraft();
         });
         block.querySelectorAll("input, textarea, select").forEach(control => {
@@ -77,6 +108,7 @@
         bindBlock(block);
         if (values) applyValues(block, values);
         updateEmptyState();
+        updateMoveButtons();
         saveDraft();
         if (focus) block.querySelector("input, textarea")?.focus();
         return block;
@@ -246,12 +278,14 @@
     }
 
     function renderStatus(data) {
+        scriptRunning = !!data.running;
         statusBox.textContent = data.status_text || (data.running ? "Running" : "Idle");
         runButton.disabled = !!data.running;
         pauseButton.disabled = !data.running;
         stopButton.disabled = !data.running;
         pauseButton.textContent = data.paused ? "Resume" : "Pause";
         canvas.classList.toggle("is-running", !!data.running);
+        updateMoveButtons();
         Array.from(canvas.children).forEach((block, index) => {
             block.classList.toggle("is-current", data.running && data.current_block === index);
         });

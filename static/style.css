@@ -1174,6 +1174,7 @@ input:focus, select:focus {
 
 .script-save-bar {
     display: flex;
+    flex-wrap: wrap;
     align-items: end;
     gap: 8px;
     margin-top: 14px;
@@ -1185,10 +1186,19 @@ input:focus, select:focus {
 
 .script-save-bar .script-field {
     flex: 1 1 240px;
+    min-width: 0;
+}
+
+.script-save-bar > .btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
 }
 
 .script-save-bar .export-status {
     align-self: center;
+    flex: 0 1 auto;
+    margin-left: auto;
+    min-width: 0;
 }
 
 .script-canvas {
@@ -1249,8 +1259,23 @@ input:focus, select:focus {
     font-size: 12px;
 }
 
+.script-move-up,
+.script-move-down {
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--panel2);
+    color: var(--text);
+    min-width: 30px;
+    min-height: 30px;
+    cursor: pointer;
+}
+
+.script-move-up { margin-left: auto; }
+.script-move-up:disabled,
+.script-move-down:disabled { opacity: .4; cursor: default; }
+
 .script-remove {
-    margin-left: auto;
+    margin-left: 0;
     border: 0;
     background: transparent;
     color: var(--muted);

@@ -30,6 +30,7 @@
         </div>
 
         <div id="scriptCanvas" class="script-canvas" aria-label="Script blocks"></div>
+        <p id="scriptReorderStatus" class="visually-hidden" role="status" aria-live="polite"></p>
 
         <div id="scriptEmpty" class="script-empty">
             <strong>Your canvas is empty</strong>
@@ -63,6 +64,8 @@
             <span class="script-drag" title="Drag to reorder" aria-hidden="true">&#9776;</span>
             <strong>Target</strong>
             <span class="script-block-summary">Device group</span>
+            <button class="script-move-up" type="button" aria-label="Move Target block up" title="Move up">&#8593;</button>
+            <button class="script-move-down" type="button" aria-label="Move Target block down" title="Move down">&#8595;</button>
             <button class="script-remove" type="button" aria-label="Remove block">&times;</button>
         </div>
         <div class="script-block-body">
@@ -105,6 +108,8 @@
             <span class="script-drag" title="Drag to reorder" aria-hidden="true">&#9776;</span>
             <strong>Command</strong>
             <span class="script-block-summary">Send data</span>
+            <button class="script-move-up" type="button" aria-label="Move Command block up" title="Move up">&#8593;</button>
+            <button class="script-move-down" type="button" aria-label="Move Command block down" title="Move down">&#8595;</button>
             <button class="script-remove" type="button" aria-label="Remove block">&times;</button>
         </div>
         <div class="script-block-body command-block-body">
@@ -125,6 +130,8 @@
             <span class="script-drag" title="Drag to reorder" aria-hidden="true">&#9776;</span>
             <strong>Delay</strong>
             <span class="script-block-summary">Wait before continuing</span>
+            <button class="script-move-up" type="button" aria-label="Move Delay block up" title="Move up">&#8593;</button>
+            <button class="script-move-down" type="button" aria-label="Move Delay block down" title="Move down">&#8595;</button>
             <button class="script-remove" type="button" aria-label="Remove block">&times;</button>
         </div>
         <div class="script-block-body delay-block-body">
@@ -140,7 +147,7 @@
 {% block scripts %}
 <script src="{{ url_for('static', filename='log_view.js') }}?v=2"></script>
 <script
-    src="{{ url_for('static', filename='scripts.js') }}?v=log-view-1"
+    src="{{ url_for('static', filename='scripts.js') }}?v=keyboard-reorder-1"
     data-start-url="{{ url_for('main.scripts_start') }}"
     data-pause-url="{{ url_for('main.scripts_pause') }}"
     data-stop-url="{{ url_for('main.scripts_stop') }}"

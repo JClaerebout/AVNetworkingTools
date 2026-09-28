@@ -95,21 +95,21 @@
         </table>
     </div>
 </div>
-<div id="scanContextMenu" class="context-menu">
-    <button id="pingDeviceButton" type="button">Ping</button>
-    <button id="connectDeviceButton" type="button">Connect</button>
-    <button id="addToScriptButton" type="button">Add to script</button>
-    <button id="openWebpageButton" type="button" style="display:none;">Open webpage</button>
-    <button id="copyIpButton" type="button">Copy IP</button>
-    <button id="copyMacButton" type="button">Copy MAC</button>
-    <button id="copyHostnameButton" type="button">Copy hostname</button>
-    <button id="copyManufacturerButton" type="button">Copy manufacturer</button>
+<div id="scanContextMenu" class="context-menu" role="menu" aria-label="Device actions">
+    <button id="pingDeviceButton" type="button" role="menuitem">Ping</button>
+    <button id="connectDeviceButton" type="button" role="menuitem">Connect</button>
+    <button id="addToScriptButton" type="button" role="menuitem">Add to script</button>
+    <button id="openWebpageButton" type="button" role="menuitem" style="display:none;">Open webpage</button>
+    <button id="copyIpButton" type="button" role="menuitem">Copy IP</button>
+    <button id="copyMacButton" type="button" role="menuitem">Copy MAC</button>
+    <button id="copyHostnameButton" type="button" role="menuitem">Copy hostname</button>
+    <button id="copyManufacturerButton" type="button" role="menuitem">Copy manufacturer</button>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script
-    src="{{ url_for('static', filename='ip_scan.js') }}?v=device-actions-1"
+    src="{{ url_for('static', filename='ip_scan.js') }}?v=keyboard-actions-1"
     data-ping-url="{{ url_for('main.ping_page') }}"
     data-connect-url="{{ url_for('main.connection_test_page') }}"
     data-scripts-url="{{ url_for('main.scripts_page') }}"

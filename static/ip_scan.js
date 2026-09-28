@@ -35,6 +35,12 @@
     let selectedContextItem = null;
     let monitorStopping = false;
     let exportStatusTimer = null;
+    let menuTriggerIp = null;
+
+    function actionButtonFor(ip) {
+        return Array.from(scanResults.querySelectorAll(".scan-result-row"))
+            .find(row => row.dataset.ip === ip)?.querySelector(".scan-actions-button");
+    }
 
     function showExportSuccess(message) {
         clearTimeout(exportStatusTimer);
@@ -60,6 +66,8 @@
     }
 
     function renderResults(results) {
+        const focusedIp = document.activeElement?.classList?.contains("scan-actions-button")
+            ? document.activeElement.closest(".scan-result-row")?.dataset.ip : null;
         latestResults = results || [];
         scanResults.innerHTML = "";
 
@@ -115,8 +123,9 @@
                 <td>${item.manufacturer || "Unknown"}</td>
                 <td>${item.hostname || "-"}</td>
                 <td>${status}</td>
-                <td><button class="scan-actions-button" type="button" aria-label="Device actions">Actions</button></td>
+                <td><button class="scan-actions-button" type="button" aria-haspopup="menu" aria-controls="scanContextMenu" aria-expanded="false">Actions</button></td>
             `;
+            row.querySelector(".scan-actions-button").setAttribute("aria-label", `Actions for ${row.dataset.ip || "device"}`);
 
             row.querySelector(".scan-web-link")?.addEventListener("click", event => {
                 event.stopPropagation();
@@ -136,16 +145,19 @@
                 event.stopPropagation();
                 selectRow();
                 const bounds = event.currentTarget.getBoundingClientRect();
-                showContextMenu(bounds.left, bounds.bottom);
+                showContextMenu(bounds.left, bounds.bottom, row.dataset.ip);
             });
             row.addEventListener("contextmenu", event => {
                 event.preventDefault();
                 selectRow();
-                showContextMenu(event.clientX, event.clientY);
+                showContextMenu(event.clientX, event.clientY, row.dataset.ip);
             });
 
             scanResults.appendChild(row);
         }
+        if (focusedIp) actionButtonFor(focusedIp)?.focus({preventScroll: true});
+        if (menuTriggerIp && !actionButtonFor(menuTriggerIp)) hideContextMenu();
+        else if (menuTriggerIp) actionButtonFor(menuTriggerIp)?.setAttribute("aria-expanded", "true");
     }
 
     function renderStatus(data) {
@@ -284,7 +296,15 @@
         });
     }
 
-    function showContextMenu(x, y) {
+    function menuButtons() {
+        return Array.from(contextMenu.querySelectorAll("button"))
+            .filter(button => !button.disabled && button.style.display !== "none");
+    }
+
+    function showContextMenu(x, y, triggerIp) {
+        if (menuTriggerIp) actionButtonFor(menuTriggerIp)?.setAttribute("aria-expanded", "false");
+        menuTriggerIp = triggerIp;
+        actionButtonFor(triggerIp)?.setAttribute("aria-expanded", "true");
         const hasIp = !!selectedContextItem?.ip;
         pingDeviceButton.disabled = !hasIp;
         connectDeviceButton.disabled = !hasIp;
@@ -303,6 +323,7 @@
         const bounds = contextMenu.getBoundingClientRect();
         contextMenu.style.left = `${Math.max(margin, Math.min(x, window.innerWidth - bounds.width - margin))}px`;
         contextMenu.style.top = `${Math.max(margin, Math.min(y, window.innerHeight - bounds.height - margin))}px`;
+        menuButtons()[0]?.focus();
     }
 
     function isCopyableDetail(value) {
@@ -313,8 +334,12 @@
             && normalized !== "looking up...";
     }
 
-    function hideContextMenu() {
+    function hideContextMenu(restoreFocus = false) {
+        const trigger = menuTriggerIp ? actionButtonFor(menuTriggerIp) : null;
+        trigger?.setAttribute("aria-expanded", "false");
         contextMenu.style.display = "none";
+        menuTriggerIp = null;
+        if (restoreFocus) trigger?.focus();
     }
 
     function openTool(baseUrl) {
@@ -448,12 +473,27 @@
         copyText(selectedContextItem?.manufacturer || "");
     });
 
-    document.addEventListener("click", hideContextMenu);
+    document.addEventListener("click", event => {
+        if (!contextMenu.contains(event.target)) hideContextMenu();
+    });
 
     document.addEventListener("keydown", event => {
+        if (contextMenu.style.display !== "block") return;
         if (event.key === "Escape") {
-            hideContextMenu();
+            event.preventDefault();
+            hideContextMenu(true);
+        } else if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key) && contextMenu.contains(document.activeElement)) {
+            event.preventDefault();
+            const buttons = menuButtons();
+            const index = buttons.indexOf(document.activeElement);
+            const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1
+                : (index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length;
+            buttons[next]?.focus();
         }
+    });
+    document.addEventListener("focusin", event => {
+        if (contextMenu.style.display === "block" && !contextMenu.contains(event.target)
+            && event.target !== actionButtonFor(menuTriggerIp)) hideContextMenu();
     });
 
     monitorScanCheckbox.addEventListener("change", () => {
