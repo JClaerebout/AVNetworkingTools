@@ -13,6 +13,9 @@
 
     if (!ipInput) return;
 
+    const selectedTarget = new URLSearchParams(window.location.search).get("target");
+    if (selectedTarget) ipInput.value = selectedTarget;
+
     let exportStatusTimer = null;
 
     function showExportSuccess() {

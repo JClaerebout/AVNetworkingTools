@@ -303,6 +303,18 @@
     });
 
     loadDraft();
+    const selectedTarget = new URLSearchParams(window.location.search).get("target");
+    if (selectedTarget) {
+        const emptyTarget = Array.from(canvas.querySelectorAll('.target-block'))
+            .find(block => !block.querySelector('.target-list').value.trim());
+        const block = emptyTarget || addBlock("target", null, false);
+        block.querySelector('.target-list').value = selectedTarget;
+        block.querySelector('.target-list').focus();
+        saveDraft();
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.searchParams.delete("target");
+        window.history.replaceState(null, "", cleanUrl);
+    }
     refreshSavedScripts();
     poller.start();
     window.addEventListener("pagehide", poller.stop);

@@ -34,6 +34,9 @@
 
     if (!protocolSelect) return;
 
+    const selectedTarget = new URLSearchParams(window.location.search).get("target");
+    if (selectedTarget) hostInput.value = selectedTarget;
+
     const connectionConfigControls = [
         protocolSelect,
         hostInput,

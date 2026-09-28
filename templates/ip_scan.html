@@ -86,15 +86,19 @@
                     <th>Manufacturer</th>
                     <th>Hostname</th>
                     <th>Status</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody id="scanResults">
-                <tr><td colspan="6" class="muted-cell">No scan results yet.</td></tr>
+                <tr><td colspan="7" class="muted-cell">No scan results yet.</td></tr>
             </tbody>
         </table>
     </div>
 </div>
 <div id="scanContextMenu" class="context-menu">
+    <button id="pingDeviceButton" type="button">Ping</button>
+    <button id="connectDeviceButton" type="button">Connect</button>
+    <button id="addToScriptButton" type="button">Add to script</button>
     <button id="openWebpageButton" type="button" style="display:none;">Open webpage</button>
     <button id="copyIpButton" type="button">Copy IP</button>
     <button id="copyMacButton" type="button">Copy MAC</button>
@@ -105,7 +109,10 @@
 
 {% block scripts %}
 <script
-    src="{{ url_for('static', filename='ip_scan.js') }}?v=context-copy-1"
+    src="{{ url_for('static', filename='ip_scan.js') }}?v=device-actions-1"
+    data-ping-url="{{ url_for('main.ping_page') }}"
+    data-connect-url="{{ url_for('main.connection_test_page') }}"
+    data-scripts-url="{{ url_for('main.scripts_page') }}"
     data-status-url="{{ url_for('main.ip_scan_status') }}"
     data-open-web-url="{{ url_for('main.ip_scan_open_web') }}"
     data-export-url="{{ url_for('main.ip_scan_export') }}"

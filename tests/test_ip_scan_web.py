@@ -13,6 +13,12 @@ class IpScanWebTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'id="copyHostnameButton"', response.data)
         self.assertIn(b'id="copyManufacturerButton"', response.data)
+        self.assertIn(b'id="pingDeviceButton"', response.data)
+        self.assertIn(b'id="connectDeviceButton"', response.data)
+        self.assertIn(b'id="addToScriptButton"', response.data)
+        self.assertIn(b'data-ping-url="/ping"', response.data)
+        self.assertIn(b'data-connect-url="/connection-test"', response.data)
+        self.assertIn(b'data-scripts-url="/scripts"', response.data)
 
     @patch("scan_utils.socket.socket")
     def test_probe_web_services_reports_only_open_ports(self, socket_class):

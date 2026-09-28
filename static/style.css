@@ -897,9 +897,24 @@ input:focus, select:focus {
     color: var(--accent-hover);
 }
 
+.scan-actions-button {
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 5px 9px;
+    background: var(--context-bg);
+    color: var(--text);
+    cursor: pointer;
+}
+
+.scan-actions-button:hover,
+.scan-actions-button:focus-visible {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
 .context-menu {
     display: none;
-    position: absolute;
+    position: fixed;
     z-index: 9999;
     min-width: 150px;
     background: var(--context-bg);

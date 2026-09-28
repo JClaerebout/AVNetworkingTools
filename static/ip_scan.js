@@ -18,6 +18,9 @@
 
     const contextMenu = document.getElementById("scanContextMenu");
     const openWebpageButton = document.getElementById("openWebpageButton");
+    const pingDeviceButton = document.getElementById("pingDeviceButton");
+    const connectDeviceButton = document.getElementById("connectDeviceButton");
+    const addToScriptButton = document.getElementById("addToScriptButton");
     const copyIpButton = document.getElementById("copyIpButton");
     const copyMacButton = document.getElementById("copyMacButton");
     const copyHostnameButton = document.getElementById("copyHostnameButton");
@@ -65,12 +68,12 @@
         downloadCsvButton.disabled = filteredResults.length === 0;
 
         if (latestResults.length === 0) {
-            scanResults.innerHTML = '<tr><td colspan="6" class="muted-cell">No scan results yet.</td></tr>';
+            scanResults.innerHTML = '<tr><td colspan="7" class="muted-cell">No scan results yet.</td></tr>';
             return;
         }
 
         if (filteredResults.length === 0) {
-            scanResults.innerHTML = '<tr><td colspan="6" class="muted-cell">No results match your search.</td></tr>';
+            scanResults.innerHTML = '<tr><td colspan="7" class="muted-cell">No results match your search.</td></tr>';
             return;
         }
 
@@ -112,6 +115,7 @@
                 <td>${item.manufacturer || "Unknown"}</td>
                 <td>${item.hostname || "-"}</td>
                 <td>${status}</td>
+                <td><button class="scan-actions-button" type="button" aria-label="Device actions">Actions</button></td>
             `;
 
             row.querySelector(".scan-web-link")?.addEventListener("click", event => {
@@ -119,9 +123,7 @@
                 openWebpage(row.dataset.ip, row.dataset.webScheme);
             });
 
-            row.addEventListener("contextmenu", event => {
-                event.preventDefault();
-
+            function selectRow() {
                 selectedContextItem = {
                     ip: row.dataset.ip,
                     mac: row.dataset.mac,
@@ -129,8 +131,17 @@
                     manufacturer: row.dataset.manufacturer,
                     webScheme: row.dataset.webScheme
                 };
-
-                showContextMenu(event.pageX, event.pageY);
+            }
+            row.querySelector(".scan-actions-button").addEventListener("click", event => {
+                event.stopPropagation();
+                selectRow();
+                const bounds = event.currentTarget.getBoundingClientRect();
+                showContextMenu(bounds.left, bounds.bottom);
+            });
+            row.addEventListener("contextmenu", event => {
+                event.preventDefault();
+                selectRow();
+                showContextMenu(event.clientX, event.clientY);
             });
 
             scanResults.appendChild(row);
@@ -274,6 +285,10 @@
     }
 
     function showContextMenu(x, y) {
+        const hasIp = !!selectedContextItem?.ip;
+        pingDeviceButton.disabled = !hasIp;
+        connectDeviceButton.disabled = !hasIp;
+        addToScriptButton.disabled = !hasIp;
         const scheme = selectedContextItem?.webScheme || "";
         copyHostnameButton.disabled = !isCopyableDetail(selectedContextItem?.hostname);
         copyManufacturerButton.disabled = !isCopyableDetail(selectedContextItem?.manufacturer);
@@ -300,6 +315,14 @@
 
     function hideContextMenu() {
         contextMenu.style.display = "none";
+    }
+
+    function openTool(baseUrl) {
+        const ip = selectedContextItem?.ip;
+        if (!ip) return;
+        const url = new URL(baseUrl, window.location.href);
+        url.searchParams.set("target", ip);
+        window.location.assign(url.href);
     }
 
     async function copyText(value) {
@@ -401,6 +424,9 @@
     copyIpButton.addEventListener("click", () => {
         copyText(selectedContextItem?.ip || "");
     });
+    pingDeviceButton.addEventListener("click", () => openTool(urls.pingUrl));
+    connectDeviceButton.addEventListener("click", () => openTool(urls.connectUrl));
+    addToScriptButton.addEventListener("click", () => openTool(urls.scriptsUrl));
 
     openWebpageButton.addEventListener("click", event => {
         event.stopPropagation();
