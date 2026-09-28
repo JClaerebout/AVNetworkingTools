@@ -55,7 +55,7 @@ Interface 9: WiFi
             {"224.0.0.251", "239.69.1.12"},
         )
 
-    def test_high_rate_unjoined_group_flags_flooding(self):
+    def test_packet_rate_alone_does_not_flag_flooding(self):
         packet = ipv4_packet("192.168.10.20", "239.69.1.12", 17, b"x" * 1200)
         for _ in range(600):
             multicast_utils._process_ipv4_packet(packet, timestamp=1000.0)
@@ -69,8 +69,8 @@ Interface 9: WiFi
             status = multicast_utils.get_multicast_status()
         finally:
             multicast_utils.time.time = original_time
-        self.assertTrue(status["groups"][0]["suspected_flood"])
-        self.assertIn("snooping", {item["code"] for item in status["warnings"]})
+        self.assertFalse(status["groups"][0]["suspected_flood"])
+        self.assertNotIn("snooping", {item["code"] for item in status["warnings"]})
 
     def test_elapsed_time_freezes_when_capture_stops(self):
         with multicast_utils._lock:

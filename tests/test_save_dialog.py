@@ -1,3 +1,4 @@
+from http_test_support import authorized_client
 import tempfile
 import unittest
 from pathlib import Path
@@ -28,7 +29,7 @@ class SaveDialogTests(unittest.TestCase):
     @patch('routes.get_ping_status', return_value={'output': ['reply']})
     @patch('export_utils.choose_save_path', side_effect=SaveCancelled)
     def test_cancel_response(self, choose, status):
-        response = app.test_client().post('/ping/export.txt')
+        response = authorized_client(app).post('/ping/export.txt')
         self.assertTrue(response.get_json()['cancelled'])
         self.assertFalse(response.get_json()['success'])
 

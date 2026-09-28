@@ -1,4 +1,6 @@
 import json
+import ipaddress
+import threading
 import re
 import time
 from datetime import datetime
@@ -7,6 +9,37 @@ from typing import Dict, List, Optional
 from history import save_history_entry
 import win32com.client
 from system_utils import run_cmd, run_powershell
+
+
+_previous_configs = {}
+_config_lock = threading.RLock()
+
+
+def _remember_config(interface_name):
+    try:
+        previous = next((dict(n) for n in get_nics() if n["name"] == interface_name), None)
+    except Exception:
+        previous = None
+    with _config_lock:
+        if previous:
+            _previous_configs[interface_name] = previous
+        else:
+            # Never offer a stale snapshot as the settings immediately preceding this change.
+            _previous_configs.pop(interface_name, None)
+
+
+def restore_previous_config(interface_name):
+    with _config_lock:
+        previous = _previous_configs.get(interface_name)
+    if not previous:
+        return False, "No previous settings are available for this interface in this session."
+    if previous.get("dhcp_raw") == "Enabled":
+        return set_dhcp(interface_name)
+    return set_static(interface_name, previous["ip"], previous["subnet"], previous.get("gateway", ""), previous.get("dns", []))
+
+
+def _ps_literal(value):
+    return "'" + str(value).replace("'", "''") + "'"
 
 
 def prefix_to_subnet(prefix: Optional[int]) -> str:
@@ -60,11 +93,12 @@ def get_wmi():
 def is_interface_connected(interface_name: str) -> bool:
     wmi = get_wmi()
     adapters = wmi.ExecQuery(
-        f"SELECT * FROM Win32_NetworkAdapter WHERE NetConnectionID = '{interface_name}'"
+        "SELECT * FROM Win32_NetworkAdapter WHERE NetConnectionID IS NOT NULL"
     )
 
     for adapter in adapters:
-        return adapter.NetConnectionStatus == 2
+        if adapter.NetConnectionID == interface_name:
+            return adapter.NetConnectionStatus == 2
 
     return False
 
@@ -221,6 +255,7 @@ def set_dhcp(interface_name: str) -> tuple[bool, str]:
     if not is_interface_connected(interface_name):
         return False, f"Cannot enable DHCP on '{interface_name}' because the NIC is disconnected. Connect the cable or enable the adapter first, then try again."
 
+    _remember_config(interface_name)
     commands = [
         ["netsh", "interface", "ip", "set", "address", f"name={interface_name}", "source=dhcp"],
         ["netsh", "interface", "ip", "set", "dns", f"name={interface_name}", "source=dhcp"],
@@ -237,13 +272,13 @@ def set_dhcp(interface_name: str) -> tuple[bool, str]:
 
 def check_windows_ip_duplicate(interface_name: str, ip: str) -> tuple[bool, str]:
     script = f"""
-$ip = Get-NetIPAddress -InterfaceAlias {json.dumps(interface_name)} -IPAddress {json.dumps(ip)} -ErrorAction SilentlyContinue
+$ip = Get-NetIPAddress -InterfaceAlias {_ps_literal(interface_name)} -IPAddress {_ps_literal(ip)} -ErrorAction Stop
 if ($ip) {{ [string]$ip.AddressState }} else {{ 'NotFound' }}
 """
     code, stdout, stderr = run_powershell(script)
 
     if code != 0:
-        return False, ""
+        return False, "Unavailable"
 
     state = stdout.strip()
 
@@ -253,15 +288,33 @@ if ($ip) {{ [string]$ip.AddressState }} else {{ 'NotFound' }}
     return False, state
 
 def set_static(interface_name: str, ip: str, subnet: str, gateway: str, dns_servers: List[str]) -> tuple[bool, str]:
+    try:
+        prefix = subnet_to_prefix(subnet)
+        if prefix is None:
+            raise ValueError("Invalid subnet mask.")
+        address = ipaddress.IPv4Address(ip)
+        network = ipaddress.IPv4Network(f"{ip}/{prefix}", strict=False)
+        if address.is_multicast or address.is_unspecified or address.is_loopback or int(address) == 0xffffffff:
+            raise ValueError("Choose a usable unicast IPv4 address.")
+        if prefix < 31 and address in (network.network_address, network.broadcast_address):
+            raise ValueError("IP address cannot be the subnet's network or broadcast address.")
+        if gateway:
+            gw = ipaddress.IPv4Address(gateway)
+            if gw not in network or gw == address or gw.is_multicast or gw.is_unspecified or gw.is_loopback or int(gw) == 0xffffffff:
+                raise ValueError("Gateway must be a different usable address in the selected subnet.")
+            if prefix < 31 and gw in (network.network_address, network.broadcast_address):
+                raise ValueError("Gateway cannot be a network or broadcast address.")
+        for dns in dns_servers:
+            parsed_dns = ipaddress.IPv4Address(dns)
+            if parsed_dns.is_multicast or parsed_dns.is_unspecified or int(parsed_dns) == 0xffffffff:
+                raise ValueError("DNS servers must be usable unicast IPv4 addresses.")
+    except (ValueError, TypeError) as exc:
+        return False, f"Invalid network settings: {exc}"
+
     if not is_interface_connected(interface_name):
         return False, f"Cannot set a static address on '{interface_name}' because the NIC is disconnected. Connect the cable or enable the adapter first, then try again."
 
-    if not ip or not subnet:
-        return False, "IP and subnet are required for static mode."
-
-    if subnet_to_prefix(subnet) is None:
-        return False, "Invalid subnet mask. Example: 255.255.255.0"
-
+    _remember_config(interface_name)
     cmd = [
         "netsh", "interface", "ip", "set", "address",
         f"name={interface_name}",
@@ -330,7 +383,9 @@ def set_static(interface_name: str, ip: str, subnet: str, gateway: str, dns_serv
             f"Address state: {address_state}."
         )
 
-    return True, "Static network settings applied. No IP conflict detected."
+    if address_state.lower() != "preferred":
+        return True, f"Static network settings applied. WARNING: Conflict verification unavailable or incomplete (Windows state: {address_state or 'Unavailable'})."
+    return True, "Static network settings applied. Windows currently reports the address as Preferred; no duplicate was reported by this check."
 
 
 def release_dhcp(interface_name: str) -> tuple[bool, str]:

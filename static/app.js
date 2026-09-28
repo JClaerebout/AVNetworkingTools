@@ -139,7 +139,19 @@
 // Keep unfinished field values when navigating between tool pages in this tab.
 (function preservePageFields() {
     const storageKey = `avNetworkingTools:page-fields:${window.location.pathname}`;
-    const fieldSelector = 'input:not([type="hidden"]):not([type="file"]):not([type="button"]):not([type="submit"]), select, textarea';
+    const fieldSelector = 'input:not([type="password"]):not([data-sensitive]):not([type="hidden"]):not([type="file"]):not([type="button"]):not([type="submit"]), select:not([data-sensitive]), textarea:not([data-sensitive])';
+    // Remove password entries left by older versions, including drafts from other pages.
+    try {
+        for (let i = 0; i < sessionStorage.length; i++) {
+            const key = sessionStorage.key(i);
+            if (!key.startsWith('avNetworkingTools:page-fields:')) continue;
+            const fields = JSON.parse(sessionStorage.getItem(key) || '{}');
+            for (const name of Object.keys(fields)) {
+                if (/password|secret|token/i.test(name)) delete fields[name];
+            }
+            sessionStorage.setItem(key, JSON.stringify(fields));
+        }
+    } catch (_error) { /* Storage may be unavailable. Never restore password controls. */ }
     let savedFields = {};
 
     try {
@@ -287,6 +299,7 @@ function showOperationNotice(message, category = 'info') {
 function operationMessage(form) {
     if (form.classList.contains('priority-form')) return 'Updating IPv4 priority...';
     if (form.id.startsWith('release-')) return 'Releasing DHCP lease...';
+    if (form.id.startsWith('restore-')) return 'Restoring previous network settings...';
     if (form.id.startsWith('renew-')) return 'Renewing DHCP lease...';
 
     return form.querySelector('[name="mode"]')?.value === 'dhcp'
@@ -332,7 +345,7 @@ function showResponseNotice(responseHtml) {
     }
 }
 
-document.querySelectorAll('.config-form, .priority-form, form[id^="release-"], form[id^="renew-"]').forEach(form => {
+document.querySelectorAll('.config-form, .priority-form, form[id^="release-"], form[id^="renew-"], form[id^="restore-"]').forEach(form => {
     form.addEventListener('submit', event => {
         event.preventDefault();
         if (form.closest('.nic-card')?.classList.contains('is-busy')) return;

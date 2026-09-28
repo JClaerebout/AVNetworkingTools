@@ -1,3 +1,4 @@
+from http_test_support import authorized_client
 import tempfile
 import unittest
 from pathlib import Path
@@ -12,7 +13,7 @@ class DownloadExportTests(unittest.TestCase):
         get_ping_status.return_value = {"output": ["Reply from 192.168.1.1"]}
 
         with tempfile.TemporaryDirectory() as temp_dir, patch("export_utils.choose_save_path", side_effect=lambda filename: Path(temp_dir) / filename):
-            response = app.test_client().post("/ping/export.txt")
+            response = authorized_client(app).post("/ping/export.txt")
             data = response.get_json()
             saved_path = Path(data["path"])
 
@@ -31,7 +32,7 @@ class DownloadExportTests(unittest.TestCase):
         }]
 
         with tempfile.TemporaryDirectory() as temp_dir, patch("export_utils.choose_save_path", side_effect=lambda filename: Path(temp_dir) / filename):
-            response = app.test_client().post(
+            response = authorized_client(app).post(
                 "/ip-scan/export.csv",
                 json={"results": visible_results},
             )
@@ -47,7 +48,7 @@ class DownloadExportTests(unittest.TestCase):
             self.assertIn("Visible Vendor", content)
 
     def test_ip_scan_post_rejects_invalid_results(self):
-        response = app.test_client().post("/ip-scan/export.csv", json={"results": "invalid"})
+        response = authorized_client(app).post("/ip-scan/export.csv", json={"results": "invalid"})
 
         self.assertEqual(response.status_code, 400)
         self.assertFalse(response.get_json()["success"])
@@ -75,7 +76,7 @@ class DownloadExportTests(unittest.TestCase):
         }
 
         with tempfile.TemporaryDirectory() as temp_dir, patch("export_utils.choose_save_path", side_effect=lambda filename: Path(temp_dir) / filename):
-            response = app.test_client().post("/multicast/export.txt")
+            response = authorized_client(app).post("/multicast/export.txt")
             data = response.get_json()
             content = Path(data["path"]).read_text(encoding="utf-8")
 
@@ -87,7 +88,7 @@ class DownloadExportTests(unittest.TestCase):
 
     @patch("routes.get_multicast_status", return_value={"running": True, "interface": "Ethernet"})
     def test_multicast_report_requires_stopped_test(self, _get_multicast_status):
-        response = app.test_client().post("/multicast/export.txt")
+        response = authorized_client(app).post("/multicast/export.txt")
         self.assertEqual(response.status_code, 409)
         self.assertFalse(response.get_json()["success"])
 
@@ -99,7 +100,7 @@ class DownloadExportTests(unittest.TestCase):
         ]
 
         with tempfile.TemporaryDirectory() as temp_dir, patch("export_utils.choose_save_path", side_effect=lambda filename: Path(temp_dir) / filename):
-            response = app.test_client().post("/ip-scan/monitor/export.txt")
+            response = authorized_client(app).post("/ip-scan/monitor/export.txt")
             data = response.get_json()
             saved_path = Path(data["path"])
 
@@ -111,7 +112,7 @@ class DownloadExportTests(unittest.TestCase):
 
     @patch("routes.get_monitor_log", return_value=[])
     def test_monitor_log_post_requires_a_monitoring_session(self, _get_monitor_log):
-        response = app.test_client().post("/ip-scan/monitor/export.txt")
+        response = authorized_client(app).post("/ip-scan/monitor/export.txt")
 
         self.assertEqual(response.status_code, 409)
         self.assertFalse(response.get_json()["success"])

@@ -1,5 +1,4 @@
 import ipaddress
-import json
 import re
 import subprocess
 import sys
@@ -9,6 +8,7 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 from config import PING_HISTORY_FILE
+from history_store import load_list, update_list
 
 _ping_lock = threading.Lock()
 _ping_process: Optional[subprocess.Popen] = None
@@ -18,22 +18,17 @@ _ping_output = deque(maxlen=500)
 
 
 def load_ping_history() -> List[str]:
-    if not PING_HISTORY_FILE.exists():
-        return []
-    try:
-        data = json.loads(PING_HISTORY_FILE.read_text(encoding="utf-8"))
-        if isinstance(data, list):
-            return [str(item) for item in data if str(item).strip()]
-    except Exception:
-        pass
-    return []
+    return load_list(PING_HISTORY_FILE, lambda item: isinstance(item, str) and bool(item.strip()))
 
 
 def save_ping_history_entry(ip: str) -> None:
-    history = [item for item in load_ping_history() if item != ip]
-    history.insert(0, ip)
-    history = history[:30]
-    PING_HISTORY_FILE.write_text(json.dumps(history, indent=2), encoding="utf-8")
+    if not isinstance(ip, str) or not ip.strip():
+        raise ValueError("Ping target is required.")
+    def update(history):
+        history = [item for item in history if item != ip]
+        history.insert(0, ip)
+        return history[:30], None
+    update_list(PING_HISTORY_FILE, lambda item: isinstance(item, str) and bool(item.strip()), update)
 
 
 _HOSTNAME_LABEL_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")

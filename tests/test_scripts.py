@@ -1,3 +1,4 @@
+from http_test_support import authorized_client
 import unittest
 import socket
 import tempfile
@@ -67,7 +68,8 @@ class ScriptValidationTests(unittest.TestCase):
         connection.close.assert_called_once()
         messages = [item["message"] for item in script_utils.get_script_status()["output"]]
         self.assertTrue(any(message.startswith("TX 192.168.1.10:23") for message in messages))
-        self.assertEqual(messages[-1], "Script completed.")
+        self.assertTrue(messages[-1].startswith("Completed."))
+        self.assertEqual(script_utils.get_script_status()["outcomes"]["commands_sent"], 1)
 
     def test_delayed_response_is_received_after_last_command(self):
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -133,7 +135,7 @@ class ScriptHistoryTests(unittest.TestCase):
 
 class ScriptRouteTests(unittest.TestCase):
     def setUp(self):
-        self.client = create_app().test_client()
+        self.client = authorized_client(create_app())
 
     def test_scripts_page_loads(self):
         response = self.client.get("/scripts")

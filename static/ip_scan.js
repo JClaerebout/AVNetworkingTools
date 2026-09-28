@@ -93,7 +93,7 @@
             } else if (item.missing) {
                 status = `<span class="status-pill warn">Missing</span>`;
             } else if (item.duplicate_ip) {
-                status = `<span class="status-pill danger">Duplicate IP</span>`;
+                status = `<span class="status-pill danger" title="Repeated MAC changes observed recently; inspect the monitor log.">Possible IP conflict</span>`;
             }
 
             row.classList.toggle("duplicate-ip-row", !!item.duplicate_ip);

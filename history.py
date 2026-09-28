@@ -1,43 +1,40 @@
-import json
 from typing import Dict, List
 
 from config import HISTORY_FILE
+from history_store import load_list, update_list
 
 
 def load_history() -> List[Dict]:
-    if not HISTORY_FILE.exists():
-        return []
-    try:
-        data = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
-        return data if isinstance(data, list) else []
-    except Exception:
-        return []
+    return load_list(HISTORY_FILE, lambda item: isinstance(item, dict) and isinstance(item.get("interface"), str) and isinstance(item.get("ip"), str))
 
 
 def save_history_entry(entry: Dict) -> None:
-    history = load_history()
+    if not isinstance(entry, dict) or not isinstance(entry.get("interface"), str) or not isinstance(entry.get("ip"), str):
+        raise ValueError("History entry requires an interface and IP address.")
 
-    duplicate_key = (
-        entry.get("interface"),
-        entry.get("ip"),
-        entry.get("subnet"),
-        entry.get("gateway"),
-        entry.get("dns1"),
-        entry.get("dns2"),
-    )
+    def update(history):
+        duplicate_key = (
+            entry.get("interface"),
+            entry.get("ip"),
+            entry.get("subnet"),
+            entry.get("gateway"),
+            entry.get("dns1"),
+            entry.get("dns2"),
+        )
 
-    history = [
-        item for item in history
-        if (
-            item.get("interface"),
-            item.get("ip"),
-            item.get("subnet"),
-            item.get("gateway"),
-            item.get("dns1"),
-            item.get("dns2"),
-        ) != duplicate_key
-    ]
+        history = [
+            item for item in history
+            if (
+                item.get("interface"),
+                item.get("ip"),
+                item.get("subnet"),
+                item.get("gateway"),
+                item.get("dns1"),
+                item.get("dns2"),
+            ) != duplicate_key
+        ]
 
-    history.insert(0, entry)
-    history = history[:10]
-    HISTORY_FILE.write_text(json.dumps(history, indent=2), encoding="utf-8")
+        history.insert(0, entry)
+        return history[:10], None
+
+    update_list(HISTORY_FILE, lambda item: isinstance(item, dict) and isinstance(item.get("interface"), str) and isinstance(item.get("ip"), str), update)

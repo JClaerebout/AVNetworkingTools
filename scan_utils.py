@@ -49,6 +49,7 @@ _lookup_done = 0
 _large_scan_quick_only = False
 _scan_results: List[Dict] = []
 _monitor_log: List[str] = []
+_MAX_MONITOR_LOG = 1000
 _vendor_cache = {}
 _vendor_lock = threading.Lock()
 _mdns_cache = {"source_ip": "", "timestamp": 0.0, "names": {}}
@@ -593,6 +594,8 @@ def _lookup_new_monitor_device(ip: str, mac: str) -> None:
 
 def _append_monitor_log_locked(message: str) -> None:
     _monitor_log.append(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}")
+    if len(_monitor_log) > _MAX_MONITOR_LOG:
+        del _monitor_log[:-_MAX_MONITOR_LOG]
 
 
 def get_monitor_log() -> List[str]:
@@ -609,31 +612,31 @@ def _monitor_update_device(ip: str, mac: str, quick_scan: bool) -> bool:
             if result["ip"] == ip:
                 was_missing = bool(result.get("missing"))
                 was_duplicate = bool(result.get("duplicate_ip"))
-                seen_macs = set(result.get("seen_macs", []))
-
-                current_mac = result.get("mac", "")
-                if current_mac and "," not in current_mac:
-                    seen_macs.add(current_mac)
-
-                if mac:
-                    seen_macs.add(mac)
-
-                result["seen_macs"] = sorted(seen_macs)
+                now = time.monotonic()
+                previous_mac = result.get("mac", "")
+                history = list(result.get("mac_history", []))
+                if mac and previous_mac and mac != previous_mac:
+                    history.append({"timestamp": now, "previous": previous_mac, "current": mac})
+                    _append_monitor_log_locked(f"MAC CHANGED {ip}: {previous_mac} -> {mac}")
+                result["mac_history"] = history[-16:]
+                recent = [event for event in history if now - event["timestamp"] <= 30]
+                # One replacement is historical change; repeated changes suggest a current conflict.
+                suspected = len(recent) >= 2
                 result["missing"] = False
                 result["miss_count"] = 0
-                result["duplicate_ip"] = len(seen_macs) > 1
-                result["duplicate_macs"] = sorted(seen_macs)
-
-                if result["duplicate_ip"]:
-                    result["mac"] = ", ".join(sorted(seen_macs))
-                else:
+                result["duplicate_ip"] = suspected
+                result["duplicate_macs"] = sorted({m for e in recent for m in (e["previous"], e["current"])}) if suspected else []
+                if mac:
                     result["mac"] = mac
+                result["seen_macs"] = sorted({m for e in result["mac_history"] for m in (e["previous"], e["current"])} | ({mac or previous_mac} if mac or previous_mac else set()))
+                if was_duplicate and not suspected:
+                    _append_monitor_log_locked(f"CONFLICT OBSERVATION CLEARED {ip}: no recent repeated MAC changes")
 
                 if was_missing:
                     _append_monitor_log_locked(f"RESTORED {ip} ({mac or 'MAC unknown'})")
                 if result["duplicate_ip"] and not was_duplicate:
                     _append_monitor_log_locked(
-                        f"DUPLICATE IP {ip}: {', '.join(result['duplicate_macs'])}"
+                        f"POSSIBLE DUPLICATE IP {ip}: {', '.join(result['duplicate_macs'])}"
                     )
 
                 return False
@@ -690,7 +693,7 @@ def _monitor_probe_round(
             except Exception:
                 continue
 
-            if alive and mac:
+            if alive:
                 discovered[ip] = mac
 
     return discovered
@@ -741,6 +744,10 @@ def _monitor_worker() -> None:
         with _scan_lock:
             for result in _scan_results:
                 ip = result.get("ip", "")
+                if result.get("duplicate_ip") and sum(time.monotonic() - e["timestamp"] <= 30 for e in result.get("mac_history", [])) < 2:
+                    result["duplicate_ip"] = False
+                    result["duplicate_macs"] = []
+                    _append_monitor_log_locked(f"CONFLICT OBSERVATION CLEARED {ip}: no recent repeated MAC changes")
 
                 if result.get("is_local"):
                     result["missing"] = False
@@ -769,7 +776,7 @@ def _monitor_worker() -> None:
                 f"Monitoring active. "
                 f"{len(_scan_results)} device(s), "
                 f"{missing_count} missing, "
-                f"{duplicate_count} duplicate conflict(s)."
+                f"{duplicate_count} possible IP conflict(s)."
             )
 
         for _ in range(50):
@@ -999,15 +1006,38 @@ def _lookup_worker(reused_quick_scan: bool = False) -> None:
             else:
                 _scan_message = f"Lookup complete. Found {len(_scan_results)} device(s)."
 
-def _scan_worker(interface_name: str, custom_subnet: str = "", quick_scan: bool = False) -> None:
+def _validated_network(value):
+    network = ipaddress.ip_network(value, strict=False)
+    if network.version != 4:
+        raise ValueError("Only IPv4 scan ranges are supported.")
+    host_count = network.num_addresses if network.prefixlen >= 31 else network.num_addresses - 2
+    if host_count > _MAX_HOSTS:
+        raise ValueError(f"Subnet contains {host_count} hosts; choose a range with at most {_MAX_HOSTS} hosts.")
+    return network
+
+
+def _scan_worker(interface_name, custom_subnet="", quick_scan=False):
+    global _scan_running, _lookup_running, _scan_message
+    try:
+        _scan_worker_impl(interface_name, custom_subnet, quick_scan)
+    except Exception as exc:
+        with _scan_lock:
+            _scan_message = f"Scan failed: {exc}"
+            _lookup_running = False
+            _last_scan_context["completed"] = False
+    finally:
+        with _scan_lock:
+            _scan_running = False
+
+
+def _scan_worker_impl(interface_name: str, custom_subnet: str = "", quick_scan: bool = False) -> None:
     global _scan_running, _scan_message, _scan_total, _scan_done
-    global _large_scan_quick_only, _scan_results
+    global _large_scan_quick_only, _scan_results, _lookup_running
 
     ok, nic_or_message = _find_nic(interface_name)
     if not ok:
         with _scan_lock:
             _scan_message = str(nic_or_message)
-            _scan_running = False
         return
 
     nic = nic_or_message
@@ -1016,14 +1046,13 @@ def _scan_worker(interface_name: str, custom_subnet: str = "", quick_scan: bool 
 
     if custom_subnet:
         try:
-            network = ipaddress.ip_network(custom_subnet, strict=False)
-        except ValueError:
+            network = _validated_network(custom_subnet)
+        except ValueError as exc:
             with _scan_lock:
-                _scan_message = "Invalid custom subnet. Example: 192.168.1.0/24"
-                _scan_running = False
+                _scan_message = str(exc)
             return
     else:
-        network = ipaddress.ip_network(nic["network"], strict=False)
+        network = _validated_network(nic["network"])
 
     hosts = [str(host) for host in network.hosts()]
     local_network = ipaddress.ip_network(nic["network"], strict=False)
@@ -1038,19 +1067,8 @@ def _scan_worker(interface_name: str, custom_subnet: str = "", quick_scan: bool 
         _last_scan_context["quick_scan"] = quick_scan
         _last_scan_context["completed"] = False
 
-    if len(hosts) > _MAX_HOSTS:
-        quick_scan = True
-
-        with _scan_lock:
-            _large_scan_quick_only = True
-            _last_scan_context["quick_scan"] = True
-            _scan_message = (
-                f"Large subnet {network} has {len(hosts)} hosts. "
-                "Forcing quick scan only."
-            )
-    else:
-        with _scan_lock:
-            _large_scan_quick_only = False
+    with _scan_lock:
+        _large_scan_quick_only = False
 
     with _scan_lock:
         _scan_total = len(scan_targets)
@@ -1089,6 +1107,8 @@ def _scan_worker(interface_name: str, custom_subnet: str = "", quick_scan: bool 
 
         for future in as_completed(futures):
             if _scan_stop.is_set():
+                for pending in futures:
+                    pending.cancel()
                 break
 
             ip = futures[future]
@@ -1104,28 +1124,26 @@ def _scan_worker(interface_name: str, custom_subnet: str = "", quick_scan: bool 
                 _scan_done += 1
 
             if alive:
-                if mac:
-                    _add_result({
-                        "ip": ip,
-                        "mac": mac,
-                        "manufacturer": "-" if quick_scan else "Looking up...",
-                        "hostname": "-" if quick_scan else "Looking up...",
-                        "missing": False,
-                        "miss_count": 0,
-                        "duplicate_ip": False,
-                        "duplicate_macs": [],
-                        "seen_macs": [mac] if mac else [],
-                        "web_services": [],
-                    })
+                _add_result({
+                    "ip": ip,
+                    "mac": mac,
+                    "manufacturer": "-" if quick_scan else "Looking up...",
+                    "hostname": "-" if quick_scan else "Looking up...",
+                    "missing": False,
+                    "miss_count": 0,
+                    "duplicate_ip": False,
+                    "duplicate_macs": [],
+                    "seen_macs": [mac] if mac else [],
+                    "web_services": [],
+                })
 
     with _scan_lock:
         found = len(_scan_results)
-        _scan_running = False
-
         if _scan_stop.is_set():
             _scan_message = "Scan stopped."
             return
 
+        _lookup_running = bool(found and not quick_scan)
         _last_scan_context["completed"] = True
         _scan_message = f"Scan complete. Found {found} device(s)."
 
@@ -1146,6 +1164,11 @@ def start_scan(interface_name: str, custom_subnet: str = "", quick_scan: bool = 
 
     if not interface_name:
         return False, "Select a NIC first."
+    if custom_subnet:
+        try:
+            _validated_network(custom_subnet)
+        except ValueError as exc:
+            return False, str(exc)
 
     with _scan_lock:
         if _scan_running or _lookup_running:
@@ -1155,6 +1178,7 @@ def start_scan(interface_name: str, custom_subnet: str = "", quick_scan: bool = 
         _monitor_stop.set()
         _scan_running = True
         _scan_message = "Starting scan..."
+        _last_scan_context["completed"] = False
         _scan_total = 0
         _scan_done = 0
         _large_scan_quick_only = False
@@ -1171,7 +1195,13 @@ def start_scan(interface_name: str, custom_subnet: str = "", quick_scan: bool = 
         args=(interface_name, custom_subnet, quick_scan),
         daemon=True
     )
-    _scan_thread.start()
+    try:
+        _scan_thread.start()
+    except RuntimeError as exc:
+        with _scan_lock:
+            _scan_running = False
+            _scan_message = f"Could not start scan: {exc}"
+        return False, _scan_message
 
     return True, "Scan started."
 

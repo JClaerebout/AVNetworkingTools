@@ -1521,3 +1521,27 @@ form {
         display: none;
     }
 }
+
+/* AV Network Analyzer uses the existing light/dark theme. */
+.analyzer-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.analyzer-cards > div { padding: 12px; background: var(--inset-bg); border-radius: 8px; color: var(--muted); }
+.analyzer-cards strong { display: block; margin-top: 8px; color: var(--text); overflow-wrap: anywhere; }
+.analyzer-tabs { flex-wrap: wrap; }
+.analyzer-table { min-width: 1250px; }
+.analyzer-table summary { cursor: pointer; color: var(--accent); }
+.analyzer-detail { max-width: 340px; min-width: 240px; white-space: normal; overflow-wrap: anywhere; padding-top: 8px; }
+.analyzer-history { max-height: 360px; overflow: auto; }
+.diagnostic-warning.error { color: var(--danger); border-color: var(--danger); }
+.diagnostic-warning.information { color: var(--info-text); }
+#streams .row { margin-bottom: 12px; flex-wrap: wrap; }
+
+/* Health summaries retain the application's light/dark palette. */
+#networkHealth[data-health="HEALTHY"] { border-left: 5px solid #368b64; padding-left: 12px; }
+#networkHealth[data-health="ATTENTION"], .health-finding[data-health="ATTENTION"] { border-left: 5px solid #b58026; padding-left: 12px; }
+#networkHealth[data-health="PROBLEM"], .health-finding[data-health="PROBLEM"] { border-left: 5px solid #c64d4d; padding-left: 12px; }
+.health-finding { margin: 16px 0; }
+.health-group { margin: 10px 0; padding: 12px; border: 1px solid var(--border-color, #8886); border-radius: 8px; }
+#streams summary, #igmp summary, #timing summary, #technical summary { cursor: pointer; padding: 8px 0; font-weight: 600; }
+#healthChecks span { display: block; margin-top: 6px; }
+#healthChecks strong { font-size: 1rem; }
+#technical:target { outline: 2px solid #688ebd; outline-offset: 4px; }

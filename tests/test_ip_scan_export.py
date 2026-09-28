@@ -1,3 +1,4 @@
+from http_test_support import authorized_client
 import csv
 import io
 import unittest
@@ -28,7 +29,7 @@ class IpScanExportTests(unittest.TestCase):
             ]
         }
 
-        response = app.test_client().get("/ip-scan/export.csv")
+        response = authorized_client(app).get("/ip-scan/export.csv")
         rows = list(csv.reader(io.StringIO(response.data.decode("utf-8-sig"))))
 
         self.assertEqual(response.status_code, 200)
@@ -38,7 +39,7 @@ class IpScanExportTests(unittest.TestCase):
         self.assertEqual(rows[1][2], "'=HYPERLINK(\"bad\")")
         self.assertEqual(rows[1][4], "This PC")
         self.assertEqual(rows[2][2], "Example, Inc.")
-        self.assertEqual(rows[2][4], "Duplicate IP")
+        self.assertEqual(rows[2][4], "Possible IP conflict")
 
 
 if __name__ == "__main__":

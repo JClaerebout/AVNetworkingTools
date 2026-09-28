@@ -3,6 +3,8 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="action-token" content="{{ action_token }}">
+    <script src="{{ url_for('static', filename='request_security.js') }}"></script>
     <title>{% block title %}AVNetworkingTools{% endblock %}</title>
     <script>
         (function applySavedThemePreference() {
@@ -63,7 +65,7 @@
                         <a class="nav-link{% if current_endpoint == 'main.converter_page' %} active{% endif %}" href="{{ url_for('main.converter_page') }}">Converter</a>
                         <a class="nav-link{% if current_endpoint == 'main.scripts_page' %} active{% endif %}" href="{{ url_for('main.scripts_page') }}"{% if current_endpoint == 'main.scripts_page' %} aria-current="page"{% endif %}>Scripts</a>
                         <a class="nav-link{% if current_endpoint == 'main.command_line_page' %} active{% endif %}" href="{{ url_for('main.command_line_page') }}"{% if current_endpoint == 'main.command_line_page' %} aria-current="page"{% endif %}>Command Line</a>
-                        <a class="nav-link{% if current_endpoint == 'main.multicast_page' %} active{% endif %}" href="{{ url_for('main.multicast_page') }}"{% if current_endpoint == 'main.multicast_page' %} aria-current="page"{% endif %}>Multicast</a>
+                        <a class="nav-link{% if current_endpoint == 'main.multicast_page' %} active{% endif %}" href="{{ url_for('main.multicast_page') }}"{% if current_endpoint == 'main.multicast_page' %} aria-current="page"{% endif %}>AV Network Health Check</a>
                         <a class="nav-link{% if current_endpoint == 'main.wifi_scan_page' %} active{% endif %}" href="{{ url_for('main.wifi_scan_page') }}"{% if current_endpoint == 'main.wifi_scan_page' %} aria-current="page"{% endif %}>WiFi Scan</a>
                     </div>
                 </details>

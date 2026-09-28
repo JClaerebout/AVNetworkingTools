@@ -1,3 +1,4 @@
+from http_test_support import authorized_client
 import unittest
 from unittest.mock import patch
 
@@ -31,10 +32,10 @@ class NicPriorityTests(unittest.TestCase):
 
     @patch('routes.get_nics', return_value=[{'if_index': 12, 'ip': '192.168.1.2'}])
     def test_status_route(self, get_nics):
-        response = app.test_client().get('/nics/status')
+        response = authorized_client(app).get('/nics/status')
         self.assertEqual(response.get_json()['nics'][0]['ip'], '192.168.1.2')
 
     def test_converter_page(self):
-        response = app.test_client().get('/converter')
+        response = authorized_client(app).get('/converter')
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'converterAscii', response.data)

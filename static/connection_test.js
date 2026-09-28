@@ -120,14 +120,12 @@
 
     function renderStatus(data) {
         statusBox.textContent =
-            data.running
-                ? data.status_text
-                : "Disconnected";
+            data.status_text || "Disconnected";
         connectionConfigControls.forEach(control => {
             control.disabled = data.running;
         });
         disconnectButton.disabled = !data.running;
-        inlineInput.disabled = !data.running;
+        inlineInput.disabled = !(data.connected ?? data.running);
         exportButton.disabled = exportInProgress || !data.output || data.output.length === 0;
 
         const newOutput = data.output && data.output.length

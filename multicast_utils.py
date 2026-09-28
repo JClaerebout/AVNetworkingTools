@@ -1,11 +1,17 @@
+from analyzer_health import apply_health, sustained_bandwidth, UNJOINED_SUSTAINED_SECONDS
 import ipaddress
 import re
 import socket
-import struct
+import atexit
 import threading
 import time
+from copy import deepcopy
 from collections import defaultdict, deque
-from typing import Iterable, Optional
+from typing import Optional
+
+from analyzer_packets import parse_ipv4, parse_udp, parse_igmp, parse_ptp, parse_rtp
+from analyzer_state import Analyzer, MAX_STREAMS, rates, record_rate
+from analyzer_diagnostics import evaluate
 
 from nic_utils import get_nics
 from system_utils import run_cmd
@@ -13,9 +19,6 @@ from system_utils import run_cmd
 
 RATE_WINDOW_SECONDS = 5
 NO_QUERIER_WARNING_SECONDS = 130
-HIGH_GROUP_MBPS = 5.0
-HIGH_TOTAL_MBPS = 10.0
-FLOOD_PACKETS_PER_SECOND = 100.0
 SERVICE_NAMES = {
     "224.0.0.251": "mDNS",
     "224.0.0.252": "LLMNR",
@@ -23,6 +26,7 @@ SERVICE_NAMES = {
 }
 
 _lock = threading.RLock()
+_lifecycle_lock = threading.Lock()
 _stop_event = threading.Event()
 _capture_socket: Optional[socket.socket] = None
 _thread: Optional[threading.Thread] = None
@@ -38,6 +42,9 @@ _state = {
     "packets": 0,
     "bytes": 0,
     "groups": {},
+    "analyzer": Analyzer(),
+    "heartbeat": time.monotonic(),
+    "traffic": {"packets": 0, "bytes": 0, "buckets": deque(maxlen=5)},
     "queriers": {},
     "igmp_versions": set(),
     "igmp_counts": defaultdict(int),
@@ -60,6 +67,9 @@ def _fresh_state(interface: str, ip: str, if_index: int) -> dict:
         "packets": 0,
         "bytes": 0,
         "groups": {},
+        "analyzer": Analyzer(),
+        "heartbeat": time.monotonic(),
+        "traffic": {"packets": 0, "bytes": 0, "buckets": deque(maxlen=5)},
         "queriers": {},
         "igmp_versions": set(),
         "igmp_counts": defaultdict(int),
@@ -96,67 +106,58 @@ def _parse_join_output(output: str, wanted_index: int) -> set[str]:
 
 
 def _read_joined_groups(if_index: int) -> Optional[set[str]]:
-    code, stdout, _stderr = run_cmd(["netsh", "interface", "ipv4", "show", "joins"])
+    code, stdout, _stderr = run_cmd(["netsh", "interface", "ipv4", "show", "joins"], timeout=3)
     if code != 0:
         return None
     groups = _parse_join_output(stdout, if_index)
-    return groups or None
+    return groups if re.search(rf"\b{if_index}\s*:", stdout) else None
 
 
 def _refresh_joined_groups(force: bool = False) -> None:
     with _lock:
         if_index = _state.get("if_index")
         checked_at = float(_state.get("membership_checked_at") or 0)
+        generation = _state.get("started_at")
+        running = _state["running"]
     now = time.time()
-    if if_index is None or (not force and now - checked_at < 5):
+    if not running or if_index is None or (not force and now - checked_at < 5):
         return
+    with _lock:
+        # Reserve before the slow command so concurrent status calls do not pile up.
+        if _state.get("started_at") != generation or _state["membership_checked_at"] != checked_at:
+            return
+        _state["membership_checked_at"] = now
     joined = _read_joined_groups(int(if_index))
     with _lock:
-        if _state.get("if_index") == if_index:
+        if _state["running"] and _state.get("if_index") == if_index and _state.get("started_at") == generation:
             if joined is not None:
                 _state["joined_groups"] = joined
                 _state["membership_available"] = True
+            else:
+                _state["membership_available"] = False
             _state["membership_checked_at"] = now
 
 
-def _igmp_version_and_groups(payload: bytes) -> tuple[Optional[str], list[str], str]:
-    if len(payload) < 8:
-        return None, [], "invalid"
-    igmp_type = payload[0]
-    group = socket.inet_ntoa(payload[4:8])
-    if igmp_type == 0x11:
-        version = "v3" if len(payload) >= 12 else ("v1" if payload[1] == 0 else "v2")
-        return version, [] if group == "0.0.0.0" else [group], "query"
-    if igmp_type == 0x12:
-        return "v1", [group], "report"
-    if igmp_type == 0x16:
-        return "v2", [group], "report"
-    if igmp_type == 0x17:
-        return "v2", [group], "leave"
-    if igmp_type == 0x22:
-        groups = []
-        record_count = struct.unpack("!H", payload[6:8])[0]
-        offset = 8
-        for _ in range(record_count):
-            if offset + 8 > len(payload):
-                break
-            aux_words = payload[offset + 1]
-            source_count = struct.unpack("!H", payload[offset + 2:offset + 4])[0]
-            groups.append(socket.inet_ntoa(payload[offset + 4:offset + 8]))
-            offset += 8 + source_count * 4 + aux_words * 4
-        return "v3", groups, "report"
-    return None, [], f"type_{igmp_type:#04x}"
+_igmp_version_and_groups = parse_igmp
 
 
 def _record_igmp(source: str, payload: bytes, timestamp: float) -> None:
-    version, _groups, event = _igmp_version_and_groups(payload)
+    version, groups, event = _igmp_version_and_groups(payload)
     with _lock:
+        analyzer = _state["analyzer"]
+        if event == "invalid":
+            analyzer.malformed["igmp"] += 1
+        analyzer.events.append({"timestamp": timestamp, "source": source, "version": version,
+                                "event_type": ("group_query" if groups else "general_query") if event == "query" else event,
+                                "groups": groups})
         _state["igmp_counts"][event] += 1
         if version:
             _state["igmp_versions"].add(version)
         is_general_query = event == "query" and payload[4:8] == b"\x00\x00\x00\x00"
-        if is_general_query:
-            _state["igmp_counts"]["general_query"] += 1
+        if event == "query":
+            _state["igmp_counts"]["general_query" if is_general_query else "group_query"] += 1
+            if source not in _state["queriers"] and len(_state["queriers"]) >= 256:
+                del _state["queriers"][min(_state["queriers"], key=lambda k: _state["queriers"][k]["last_seen"])]
             querier = _state["queriers"].setdefault(source, {"last_seen": 0.0, "intervals": deque(maxlen=5)})
             if querier["last_seen"]:
                 querier["intervals"].append(timestamp - querier["last_seen"])
@@ -166,57 +167,87 @@ def _record_igmp(source: str, payload: bytes, timestamp: float) -> None:
 def _record_multicast(group: str, packet_bytes: int, timestamp: float) -> None:
     second = int(timestamp)
     with _lock:
-        item = _state["groups"].setdefault(group, {"packets": 0, "bytes": 0, "buckets": deque()})
+        if group not in _state["groups"] and len(_state["groups"]) >= MAX_STREAMS:
+            del _state["groups"][next(iter(_state["groups"]))]
+            _state["analyzer"].evicted["groups"] += 1
+        item = _state["groups"].setdefault(group, {"packets": 0, "bytes": 0, "buckets": deque(maxlen=UNJOINED_SUSTAINED_SECONDS + 1)})
         item["packets"] += 1
         item["bytes"] += packet_bytes
         _state["packets"] += 1
         _state["bytes"] += packet_bytes
+        record_rate(_state["traffic"], packet_bytes, timestamp)
         if item["buckets"] and item["buckets"][-1][0] == second:
             item["buckets"][-1][1] += 1
             item["buckets"][-1][2] += packet_bytes
         else:
             item["buckets"].append([second, 1, packet_bytes])
-        while item["buckets"] and second - item["buckets"][0][0] >= RATE_WINDOW_SECONDS:
+        while item["buckets"] and second - item["buckets"][0][0] > UNJOINED_SUSTAINED_SECONDS:
             item["buckets"].popleft()
 
 
 def _process_ipv4_packet(packet: bytes, timestamp: Optional[float] = None) -> None:
-    if len(packet) < 20 or packet[0] >> 4 != 4:
-        return
-    header_length = (packet[0] & 0x0F) * 4
-    if header_length < 20 or len(packet) < header_length:
-        return
-    total_length = struct.unpack("!H", packet[2:4])[0]
-    packet_length = min(len(packet), total_length) if total_length >= header_length else len(packet)
-    source = socket.inet_ntoa(packet[12:16])
-    destination = socket.inet_ntoa(packet[16:20])
+    ip = parse_ipv4(packet)
     now = timestamp if timestamp is not None else time.time()
+    udp = ptp = rtp = None
+    with _lock:
+        analyzer = _state["analyzer"]
+        if ip is None:
+            analyzer.malformed["ipv4"] += 1
+            return
+        if 224 <= int(ip["group"].split(".")[0]) <= 239:
+            _record_multicast(ip["group"], ip["bytes"], now)
+        if not ip["fragmented"]:
+            if ip["protocol"] == 2:
+                _record_igmp(ip["source"], ip["payload"], now)
+            if ip["protocol"] == 17:
+                udp = parse_udp(ip["payload"])
+                if udp is None:
+                    analyzer.malformed["udp"] += 1
+                elif udp["destination_port"] in (319, 320) or udp["source_port"] in (319, 320):
+                    ptp = parse_ptp(udp["payload"])
+                    if ptp is None:
+                        analyzer.ptp_candidates += 1
+                else:
+                    rtp = parse_rtp(udp["payload"])
+        analyzer.record(ip, udp, ptp, rtp, now)
+
+
+def touch_multicast_capture():
+    """A closed/crashed page cannot leave capture running indefinitely."""
+    with _lock:
+        _state["heartbeat"] = time.monotonic()
+
+
+def _open_raw_capture(interface_ip: str):
+    """Backend boundary: return a socket delivering IPv4 packets, without link headers."""
+    capture = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_IP)
     try:
-        is_multicast = ipaddress.ip_address(destination).is_multicast
-    except ValueError:
-        is_multicast = False
-    if is_multicast:
-        _record_multicast(destination, packet_length + 14, now)
-    if packet[9] == 2:
-        _record_igmp(source, packet[header_length:packet_length], now)
+        capture.bind((interface_ip, 0))
+        capture.setsockopt(socket.IPPROTO_IP, socket.IP_HDRINCL, 1)
+        capture.ioctl(socket.SIO_RCVALL, socket.RCVALL_ON)
+        capture.settimeout(1.0)
+    except Exception:
+        capture.close()
+        raise
+    return capture
 
 
 def _capture(interface_ip: str) -> None:
     global _capture_socket, _thread
     capture = None
     try:
-        capture = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_IP)
-        capture.bind((interface_ip, 0))
-        capture.setsockopt(socket.IPPROTO_IP, socket.IP_HDRINCL, 1)
-        capture.ioctl(socket.SIO_RCVALL, socket.RCVALL_ON)
-        capture.settimeout(1.0)
+        capture = _open_raw_capture(interface_ip)
         with _lock:
             _capture_socket = capture
-        _refresh_joined_groups(force=True)
         while not _stop_event.is_set():
+            with _lock:
+                expired = time.monotonic() - _state["heartbeat"] > 30
+            if expired:
+                break
             try:
                 packet, _address = capture.recvfrom(65535)
-                _process_ipv4_packet(packet)
+                if not _stop_event.is_set():
+                    _process_ipv4_packet(packet)
             except socket.timeout:
                 continue
             except OSError:
@@ -227,7 +258,7 @@ def _capture(interface_ip: str) -> None:
         with _lock:
             _state["error"] = "Packet capture requires running AVNetworkingTools as administrator."
             _state["message"] = _state["error"]
-    except OSError as exc:
+    except (OSError, AttributeError) as exc:
         with _lock:
             _state["error"] = f"Could not capture on {interface_ip}: {exc}"
             _state["message"] = _state["error"]
@@ -235,7 +266,7 @@ def _capture(interface_ip: str) -> None:
         if capture is not None:
             try:
                 capture.ioctl(socket.SIO_RCVALL, socket.RCVALL_OFF)
-            except OSError:
+            except (OSError, AttributeError):
                 pass
             capture.close()
         with _lock:
@@ -249,12 +280,12 @@ def _capture(interface_ip: str) -> None:
                 _thread = None
 
 
-def start_multicast_test(interface_name: str) -> tuple[bool, str]:
+def _start_multicast_test(interface_name: str) -> tuple[bool, str]:
     global _thread
     interface_name = str(interface_name or "").strip()
     with _lock:
         if _state["running"]:
-            return False, "A multicast health test is already running."
+            return False, "An AV Network Analyzer capture is already running."
     if not interface_name:
         return False, "Select a connected interface."
     try:
@@ -266,18 +297,24 @@ def start_multicast_test(interface_name: str) -> tuple[bool, str]:
     with _lock:
         _state.clear()
         _state.update(_fresh_state(interface_name, nic["ip"], int(nic["if_index"])))
-    _stop_event.clear()
-    _thread = threading.Thread(target=_capture, args=(nic["ip"],), daemon=True)
-    _thread.start()
-    return True, _state["message"]
+    with _lock:
+        _stop_event.clear()
+        _thread = threading.Thread(target=_capture, args=(nic["ip"],), daemon=True)
+        try:
+            _thread.start()
+        except RuntimeError as exc:
+            _thread = None
+            _state.update(running=False, stopped_at=time.time(), error=str(exc), message=str(exc))
+            return False, str(exc)
+        return True, _state["message"]
 
 
-def stop_multicast_test() -> tuple[bool, str]:
+def _stop_multicast_test() -> tuple[bool, str]:
     requested_at = time.time()
     with _lock:
         if not _state["running"]:
-            return False, "No multicast health test is running."
-        _state["message"] = "Stopping multicast health test..."
+            return False, "No AV Network Analyzer capture is running."
+        _state["message"] = "Stopping AV Network Analyzer capture..."
         _state["stopped_at"] = requested_at
         capture = _capture_socket
         capture_thread = _thread
@@ -291,101 +328,118 @@ def stop_multicast_test() -> tuple[bool, str]:
         capture_thread.join(timeout=2.5)
     with _lock:
         if _state["running"]:
-            return True, "Stopping multicast health test..."
-        return True, "Multicast health test stopped."
+            return True, "Stopping AV Network Analyzer capture..."
+        return True, "AV Network Analyzer capture stopped."
 
 
 def _rate(item: dict, now: float) -> tuple[float, float]:
-    cutoff = int(now) - RATE_WINDOW_SECONDS + 1
-    buckets: Iterable[list] = item.get("buckets", ())
-    active = [bucket for bucket in buckets if bucket[0] >= cutoff]
-    duration = min(RATE_WINDOW_SECONDS, max(1.0, now - float(_state.get("started_at") or now)))
-    return sum(x[1] for x in active) / duration, (sum(x[2] for x in active) * 8 / 1_000_000) / duration
+    with _lock:
+        return rates(item, now, float(_state.get("started_at") or now))
 
 
 def get_multicast_status() -> dict:
     _refresh_joined_groups()
     now = time.time()
     with _lock:
-        started_at = _state.get("started_at")
-        observed_until = _state.get("stopped_at") or now
-        elapsed = max(0.0, observed_until - started_at) if started_at else 0.0
-        joined = set(_state["joined_groups"])
-        membership_available = bool(_state["membership_available"])
-        groups = []
-        total_mbps = 0.0
-        flood_groups = []
-        for address, item in _state["groups"].items():
-            packets_per_second, mbps = _rate(item, observed_until)
-            total_mbps += mbps
-            link_local_control = ipaddress.ip_address(address) in ipaddress.ip_network("224.0.0.0/24")
-            suspected_flood = (
-                packets_per_second >= FLOOD_PACKETS_PER_SECOND
-                and membership_available
-                and address not in joined
-                and not link_local_control
-            )
-            if suspected_flood:
-                flood_groups.append(address)
-            groups.append({
-                "address": address,
-                "service": SERVICE_NAMES.get(address, "Unknown"),
-                "packets": item["packets"],
-                "bytes": item["bytes"],
-                "packets_per_second": round(packets_per_second, 1),
-                "mbps": round(mbps, 3),
-                "joined": address in joined,
-                "membership_known": membership_available,
-                "suspected_flood": suspected_flood,
-            })
-        groups.sort(key=lambda item: (-item["mbps"], -item["packets_per_second"], item["address"]))
+        state = {key: deepcopy(value) for key, value in _state.items() if key != "analyzer"}
+        until = state["stopped_at"] or now
+        snapshot = _state["analyzer"].snapshot(until, state["started_at"] or until)
+    started_at = state.get("started_at")
+    observed_until = state.get("stopped_at") or now
+    elapsed = max(0.0, observed_until - started_at) if started_at else 0.0
+    joined = set(state["joined_groups"])
+    membership_available = bool(state["membership_available"])
+    groups = []
+    _, total_mbps = rates(state["traffic"], observed_until, started_at or observed_until)
+    for address, item in state["groups"].items():
+        packets_per_second, mbps = rates(item, observed_until, started_at or observed_until)
+        groups.append({
+            "address": address,
+            "service": SERVICE_NAMES.get(address, "Unknown"),
+            "packets": item["packets"],
+            "bytes": item["bytes"],
+            "packets_per_second": round(packets_per_second, 1),
+            "mbps": round(mbps, 3),
+            "joined": address in joined,
+            "membership_known": membership_available,
+            "sustained_min_mbps": sustained_bandwidth(item["buckets"], observed_until),
+        })
+    groups.sort(key=lambda item: (-item["mbps"], -item["packets_per_second"], item["address"]))
 
-        queriers = []
-        for address, item in _state["queriers"].items():
-            intervals = list(item["intervals"])
-            queriers.append({
-                "ip": address,
-                "last_query_seconds": round(max(0, observed_until - item["last_seen"]), 1),
-                "query_interval_seconds": round(sum(intervals) / len(intervals), 1) if intervals else None,
-            })
-        queriers.sort(key=lambda item: item["ip"])
+    queriers = []
+    for address, item in state["queriers"].items():
+        intervals = list(item["intervals"])
+        queriers.append({
+            "ip": address,
+            "last_query_seconds": round(max(0, observed_until - item["last_seen"]), 1),
+            "query_interval_seconds": round(sum(intervals) / len(intervals), 1) if intervals else None,
+        })
+    queriers.sort(key=lambda item: item["ip"])
 
-        warnings = []
-        high_groups = [item["address"] for item in groups if item["mbps"] >= HIGH_GROUP_MBPS]
-        if total_mbps >= HIGH_TOTAL_MBPS or high_groups:
-            warnings.append({"severity": "warning", "code": "high_traffic", "message": "High multicast traffic detected."})
-        if flood_groups:
-            warnings.append({"severity": "warning", "code": "unjoined_traffic", "message": "High-rate traffic is arriving for groups this interface has not joined."})
-            warnings.append({"severity": "danger", "code": "snooping", "message": "Multicast flooding suspected; verify IGMP snooping and uplink/router configuration."})
-        if _state["groups"] and not membership_available:
-            warnings.append({"severity": "warning", "code": "membership_unknown", "message": "Windows joined-group data is unavailable; flooding assessment is incomplete."})
-        if len(queriers) > 1:
-            warnings.append({"severity": "warning", "code": "multiple_queriers", "message": "Multiple IGMP query sources observed; querier election or duplicate configuration may be occurring."})
-        if len(_state["igmp_versions"]) > 1 or "v1" in _state["igmp_versions"]:
-            warnings.append({"severity": "warning", "code": "igmp_compatibility", "message": "Mixed or legacy IGMP versions observed; verify endpoint and switch compatibility."})
-        if not _state["error"] and not _state["igmp_counts"] and elapsed >= NO_QUERIER_WARNING_SECONDS:
-            warnings.append({"severity": "warning", "code": "no_igmp", "message": "No IGMP activity observed during the test window."})
-        if not _state["error"] and not queriers and elapsed >= NO_QUERIER_WARNING_SECONDS:
-            warnings.append({"severity": "warning", "code": "no_querier", "message": "No IGMP querier observed during a full typical query interval."})
+    warnings = []
+    if state["groups"] and not membership_available:
+        warnings.append({"severity": "warning", "code": "membership_unknown", "message": "Windows joined-group data is unavailable; flooding assessment is incomplete."})
+    if len(queriers) > 1:
+        warnings.append({"severity": "warning", "code": "multiple_queriers", "message": "Multiple IGMP query sources observed; querier election or duplicate configuration may be occurring."})
+    if len(state["igmp_versions"]) > 1 or "v1" in state["igmp_versions"]:
+        warnings.append({"severity": "warning", "code": "igmp_compatibility", "message": "Mixed or legacy IGMP versions observed; verify endpoint and switch compatibility."})
+    if not state["error"] and not state["igmp_counts"] and elapsed >= NO_QUERIER_WARNING_SECONDS:
+        warnings.append({"severity": "warning", "code": "no_igmp", "message": "No IGMP activity observed during the test window."})
+    recent_queriers = [q for q in queriers if q["last_query_seconds"] < NO_QUERIER_WARNING_SECONDS]
+    if not state["error"] and not recent_queriers and elapsed >= NO_QUERIER_WARNING_SECONDS:
+        warnings.append({"severity": "warning", "code": "no_querier", "message": "No IGMP querier observed during a full typical query interval."})
 
-        return {
-            "running": _state["running"],
-            "message": _state["message"],
-            "error": _state["error"],
-            "interface": _state["interface"],
-            "ip": _state["ip"],
-            "if_index": _state["if_index"],
-            "elapsed_seconds": round(elapsed, 1),
-            "packets": _state["packets"],
-            "bytes": _state["bytes"],
-            "total_mbps": round(total_mbps, 3),
-            "groups": groups,
-            "joined_groups": sorted(joined, key=lambda value: tuple(int(x) for x in value.split("."))),
-            "membership_available": membership_available,
-            "querier_detected": bool(queriers),
-            "queriers": queriers,
-            "igmp_versions": sorted(_state["igmp_versions"]),
-            "igmp_counts": dict(_state["igmp_counts"]),
-            "warnings": warnings,
-            "no_querier_warning_after_seconds": NO_QUERIER_WARNING_SECONDS,
-        }
+    warnings.extend(evaluate(snapshot, observed_until))
+    if state["error"]:
+        warnings.append({"severity": "error", "code": "capture", "message": state["error"]})
+    unjoined = [g["address"] for g in groups if membership_available and not g["joined"] and not g["address"].startswith("224.0.0.") and g["packets_per_second"] > 0]
+    if unjoined:
+        warnings.append({"severity": "information", "code": "unjoined_observed", "message": "Unjoined multicast traffic observed. This alone does not indicate multicast flooding."})
+    warnings.sort(key=lambda w: {"error": 0, "danger": 0, "warning": 1, "information": 2}.get(w["severity"], 2))
+    roles_by_group = defaultdict(set)
+    for stream in snapshot["streams"]:
+        protocol = stream["possible_protocol"]
+        role = ("Timing / control / discovery" if stream["ip_protocol"] == 2 or protocol in ("PTP", "mDNS", "SSDP", "LLMNR") or protocol.startswith("Possible PTP")
+                else "Possible media" if protocol == "Possible RTP" else "Unknown")
+        roles_by_group[stream["group"]].add(role)
+    for group in groups:
+        group["traffic_roles"] = sorted(roles_by_group[group["address"]])
+    result = {
+        **snapshot,
+        "warning_count": sum(w["severity"] != "information" for w in warnings),
+        "running": state["running"],
+        "message": state["message"],
+        "error": state["error"],
+        "interface": state["interface"],
+        "ip": state["ip"],
+        "if_index": state["if_index"],
+        "elapsed_seconds": round(elapsed, 1),
+        "packets": state["packets"],
+        "bytes": state["bytes"],
+        "total_mbps": round(total_mbps, 3),
+        "groups": groups,
+        "joined_groups": sorted(joined, key=lambda value: tuple(int(x) for x in value.split("."))),
+        "membership_available": membership_available,
+        "querier_detected": bool(recent_queriers),
+        "queriers": queriers,
+        "igmp_versions": sorted(state["igmp_versions"]),
+        "igmp_counts": dict(state["igmp_counts"]),
+        "warnings": warnings,
+        "no_querier_warning_after_seconds": NO_QUERIER_WARNING_SECONDS,
+    }
+    return apply_health(result)
+
+
+
+
+def start_multicast_test(interface_name: str) -> tuple[bool, str]:
+    with _lifecycle_lock:
+        return _start_multicast_test(interface_name)
+
+
+def stop_multicast_test() -> tuple[bool, str]:
+    with _lifecycle_lock:
+        return _stop_multicast_test()
+
+
+atexit.register(stop_multicast_test)

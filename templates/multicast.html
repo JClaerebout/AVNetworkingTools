@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 
-{% block title %}Multicast Diagnostics - AVNetworkingTools{% endblock %}
-{% block subtitle %}[Beta] Observe IGMP health, active multicast groups and suspected multicast flooding.{% endblock %}
+{% block title %}AV Network Health Check - AVNetworkingTools{% endblock %}
+{% block subtitle %}Find common AV network problems, with technical details when you need them.{% endblock %}
 
 {% block content %}
 <div class="card">
-    <h2>IGMP / Multicast Health Test</h2>
+    <h2>AV Network Health Check</h2>
     <p class="desc">
-        Captures IPv4 multicast arriving on one interface and compares it with Windows' joined-group table.
-        For a reliable no-querier result, leave the test running for at least 130 seconds.
+        Checks multicast, IGMP, PTP and RTP traffic for common AV network problems.
+        Run the check for at least 2 minutes (130 seconds for IGMP query visibility) for best results.
     </p>
 
     {% with messages = get_flashed_messages(with_categories=true) %}
@@ -34,64 +34,95 @@
     </div>
 
     <div class="actions">
-        <button id="startMulticast" class="btn" type="button">Start Test</button>
-        <button id="stopMulticast" class="btn warn" type="button" disabled>Stop Test</button>
+        <button id="startMulticast" class="btn" type="button">Start Health Check</button>
+        <button id="stopMulticast" class="btn warn" type="button" disabled>Stop Check</button>
         <button id="downloadMulticastReport" class="btn secondary" type="button" hidden>Download Report</button>
         <span id="multicastExportStatus" class="export-status" role="status" aria-live="polite"></span>
     </div>
 </div>
 
-<div class="multicast-summary-grid">
-    <section class="card multicast-summary">
-        <h2>IGMP</h2>
-        <dl class="diagnostic-list">
-            <div><dt>Interface</dt><dd id="summaryInterface">-</dd></div>
-            <div><dt>IP</dt><dd id="summaryIp">-</dd></div>
-            <div><dt>Querier detected</dt><dd id="summaryQuerier">NO</dd></div>
-            <div><dt>IGMP version</dt><dd id="summaryVersion">Not observed</dd></div>
-            <div><dt>Queries / Reports / Leaves</dt><dd id="summaryIgmpCounts">0 / 0 / 0</dd></div>
-            <div><dt>Elapsed</dt><dd id="summaryElapsed">0 sec</dd></div>
-        </dl>
-        <div id="querierDetails" class="querier-list muted-cell">No query sources observed yet.</div>
-    </section>
-
-    <section class="card multicast-summary">
-        <h2>Warnings</h2>
-        <div id="multicastWarnings" class="diagnostic-warnings">
-            <div class="diagnostic-ok">No warnings. Start a test to collect data.</div>
-        </div>
-    </section>
-</div>
-
-<div class="card scan-results-card">
-    <div class="results-header-row">
-        <h2>Multicast Traffic</h2>
-        <div><span id="multicastTotalRate">0.000 Mbps</span> total</div>
+<nav class="actions analyzer-tabs" aria-label="Health check sections">
+    <a class="btn secondary" href="#overview">Overview</a><a class="btn secondary" href="#streams">Streams</a>
+    <a class="btn secondary" href="#igmp">IGMP</a><a class="btn secondary" href="#timing">Timing &amp; QoS</a>
+</nav>
+<section id="overview" class="card">
+    <h2 id="networkHealth" aria-live="polite">Network Health: Ready to check</h2>
+    <p id="healthMessage">Select an interface and start the health check.</p>
+    <p id="healthConfidence" class="desc"></p>
+    <div id="healthChecks" class="analyzer-cards"></div>
+    <p id="summaryElapsed" class="desc">0 seconds</p>
+    <h3>Findings</h3>
+    <div id="healthFindings" aria-live="polite">Start a check to collect evidence.</div>
+    <a class="btn secondary" href="#technical">View Technical Details</a>
+</section>
+<section id="streams" class="card">
+    <h2>Streams</h2>
+    <p class="desc">Traffic grouped by destination and service. Expand a group to inspect its sources.</p>
+    <label><input id="showInactiveGroups" type="checkbox"> Include inactive groups</label>
+    <p id="groupCount" class="desc">No groups observed.</p>
+    <div id="groupedStreams" class="health-groups"></div>
+    <details><summary>View all individual streams &amp; advanced filters</summary>
+    <div class="row">
+        <div><label for="streamFilter">Filter streams</label><input id="streamFilter" type="search" placeholder="Source, group, port, protocol, DSCP..."></div>
+        <div><label for="streamSort">Sort by</label><select id="streamSort">
+            <option value="first_seen">First seen (stable)</option><option value="source">Source</option>
+            <option value="group">Group</option><option value="udp_destination_port">UDP port</option>
+            <option value="mbps">Mbps (highest first)</option><option value="packets_per_second">Packets/s (highest first)</option>
+            <option value="packets">Packets (highest first)</option><option value="dscp">DSCP</option>
+        </select></div>
     </div>
-    <div class="table-wrap">
-        <table class="result-table">
-            <thead>
-                <tr>
-                    <th>Group</th>
-                    <th>Service</th>
-                    <th>Packets/s</th>
-                    <th>Mbps</th>
-                    <th>Total packets</th>
-                    <th>Host joined</th>
-                    <th>Assessment</th>
-                </tr>
-            </thead>
-            <tbody id="multicastGroups">
-                <tr><td colspan="7" class="muted-cell">No multicast traffic observed yet.</td></tr>
-            </tbody>
-        </table>
+    <div class="table-wrap"><table class="result-table analyzer-table">
+        <thead><tr><th>Source / detail</th><th>Multicast group</th><th>UDP src &rarr; dst</th><th>Possible protocol</th><th>Mbps</th><th>Packets/s</th><th>Packets</th><th>Avg bytes</th><th>TTL</th><th>DSCP</th><th>Last seen</th><th>Status</th></tr></thead>
+        <tbody id="multicastStreams"></tbody>
+    </table></div>
+    </details>
+</section>
+<section id="igmp" class="card">
+    <h2>IGMP</h2>
+    <p id="igmpHealthSummary"></p>
+    <p>Versions: <span id="summaryVersion">Not observed</span> &middot; Queries / Reports / Leaves: <span id="summaryIgmpCounts">0 / 0 / 0</span></p>
+    <p id="queryKinds"></p><div id="querierDetails"></div>
+    <details><summary>Joined groups</summary><p id="joinedGroups"></p></details>
+    <details><summary>Show IGMP event and membership details</summary>
+    <h3>Unjoined-group observations</h3><div id="floodingObservations"></div>
+    <h3>Recent events</h3><div class="table-wrap analyzer-history"><table class="result-table">
+        <thead><tr><th>Timestamp</th><th>Source</th><th>Version</th><th>Event</th><th>Groups</th></tr></thead><tbody id="igmpEvents"></tbody>
+    </table></div></details>
+</section>
+<section id="timing" class="card">
+    <h2>Timing &amp; QoS</h2>
+    <p id="ptpHealthSummary"></p><p id="rtpHealthSummary"></p>
+    <details><summary>Show PTP, RTP &amp; QoS details</summary>
+    <h3>DSCP distribution (captured multicast packets)</h3><div id="dscpDistribution"></div>
+    <h3>PTP domains and clock identities</h3><p id="ptpDomains"></p>
+    <div class="table-wrap"><table class="result-table"><thead><tr><th>Clock / port</th><th>Domain / version</th><th>Source IP</th><th>Announce source</th><th>Messages</th><th>Latest sequence / interval</th><th>DSCP</th><th>First / last seen</th></tr></thead><tbody id="ptpSources"></tbody></table></div>
+    <h3>RTP health estimates</h3><div id="rtpSummary"></div>
+    <p class="desc">Possible RTP requires repeated valid v2 headers. Missing packets are sequence estimates; reordered packets within the repair window reduce the estimate. Jitter is smoothed arrival-spacing variation in milliseconds, not clock-rate-based RFC 3550 jitter or a timing-compliance test. Payload content is not interpreted.</p>
+    </details>
+</section>
+<section id="technical" class="card">
+    <h2>Technical Details</h2>
+    <details><summary>View diagnostic information and capture details</summary>
+    <div class="analyzer-cards">
+        <div>Capture<strong id="summaryCapture">Idle</strong></div>
+        <div>Interface<strong id="summaryInterface">-</strong><span id="summaryIp">-</span></div>
+        <div>Active streams<strong id="summaryStreams">0</strong></div>
+        <div>Multicast<strong id="multicastTotalRate">0 Mbps</strong></div>
+        <div>Querier<strong id="summaryQuerier">Not observed</strong></div>
+        <div>PTP domains / sources<strong id="summaryPtp">0 / 0</strong></div>
+        <div>Raw diagnostic warnings<strong id="summaryWarnings">0</strong></div>
     </div>
-</div>
+    <div id="multicastWarnings" class="diagnostic-warnings"></div>
+    <h3>Standard capture limitations</h3>
+    <p class="desc">Run as Administrator. This passive Windows raw IPv4 capture analyzes only traffic visible to the selected interface; it cannot see traffic the switch does not forward to that port. DSCP and ECN are packet markings and do not verify switch QoS queues. VLAN IDs, 802.1p/PCP and Layer-2 PTP (EtherType 0x88F7) are not visible. NIC offloading and capture loss can affect measurements. Fragmented IP packets contribute to traffic totals but are not reassembled for protocol analysis. PTP common-header decoding supports version 2 over UDP 319/320; version 1 is not decoded.</p>
+    <p class="desc">Streams become inactive after 15 seconds. Rates count IPv4 bytes over a five-second window, excluding Ethernet overhead. No vendor-specific QoS profile is selected. Leaving this page stops capture; a 30-second page heartbeat timeout provides a fallback. No Npcap installation is required.</p>
+    </details>
+</section>
 {% endblock %}
 
 {% block scripts %}
 <script
-    src="{{ url_for('static', filename='multicast.js') }}?v=4"
+    src="{{ url_for('static', filename='multicast.js') }}?v=6"
     data-status-url="{{ url_for('main.multicast_status') }}"
     data-start-url="{{ url_for('main.multicast_start') }}"
     data-stop-url="{{ url_for('main.multicast_stop') }}"

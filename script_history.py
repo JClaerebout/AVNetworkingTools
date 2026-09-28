@@ -1,21 +1,22 @@
-import json
 from datetime import datetime
 
 from config import SCRIPT_HISTORY_FILE
 from script_utils import _normalize_blocks
+from history_store import load_list, update_list
 
 
 MAX_SCRIPTS = 50
 
 
 def load_scripts():
-    if not SCRIPT_HISTORY_FILE.exists():
-        return []
-    try:
-        data = json.loads(SCRIPT_HISTORY_FILE.read_text(encoding="utf-8"))
-        return data if isinstance(data, list) else []
-    except Exception:
-        return []
+    return load_list(SCRIPT_HISTORY_FILE, _valid)
+
+
+def _valid(item):
+    return (isinstance(item, dict) and isinstance(item.get("name"), str)
+            and bool(item["name"].strip()) and isinstance(item.get("blocks"), list)
+            and all(isinstance(block, dict) and block.get("type") in {"target", "delay", "command"}
+                    for block in item["blocks"]))
 
 
 def list_scripts():
@@ -53,27 +54,20 @@ def save_script(name, raw_blocks, overwrite=False):
             block["targets"] = "\n".join(block["targets"])
             block["password"] = ""
 
-    scripts = load_scripts()
-    exists = any(item.get("name") == clean_name for item in scripts)
-    if exists and not overwrite:
-        return False, "NAME_EXISTS"
-
-    scripts = [item for item in scripts if item.get("name") != clean_name]
-    scripts.insert(0, {
-        "name": clean_name,
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "blocks": blocks,
-    })
-    SCRIPT_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
-    SCRIPT_HISTORY_FILE.write_text(json.dumps(scripts[:MAX_SCRIPTS], indent=2), encoding="utf-8")
-    return True, "Script saved."
+    def update(scripts):
+        if any(item.get("name") == clean_name for item in scripts) and not overwrite:
+            return None, (False, "NAME_EXISTS")
+        scripts = [item for item in scripts if item.get("name") != clean_name]
+        scripts.insert(0, {"name": clean_name, "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "blocks": blocks})
+        return scripts[:MAX_SCRIPTS], (True, "Script saved.")
+    return update_list(SCRIPT_HISTORY_FILE, _valid, update)
 
 
 def delete_script(name):
     clean_name = (name or "").strip()
-    scripts = load_scripts()
-    remaining = [item for item in scripts if item.get("name") != clean_name]
-    if len(remaining) == len(scripts):
-        return False, "Script not found."
-    SCRIPT_HISTORY_FILE.write_text(json.dumps(remaining, indent=2), encoding="utf-8")
-    return True, "Script deleted."
+    def update(scripts):
+        remaining = [item for item in scripts if item.get("name") != clean_name]
+        if len(remaining) == len(scripts):
+            return None, (False, "Script not found.")
+        return remaining, (True, "Script deleted.")
+    return update_list(SCRIPT_HISTORY_FILE, _valid, update)

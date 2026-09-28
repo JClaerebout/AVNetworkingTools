@@ -52,6 +52,7 @@
             </div>
 
             <form class="priority-form" method="post" action="{{ url_for('main.nic_priority') }}">
+                <input type="hidden" name="_action_token" value="{{ action_token }}">
                 <input type="hidden" name="interface_index" value="{{ nic.if_index }}">
                 <label for="priority-{{ nic.if_index }}">Priority</label>
                 <select id="priority-{{ nic.if_index }}" name="metric" class="priority-select" aria-label="Priority for {{ nic.name }}">
@@ -66,6 +67,7 @@
             </form>
 
             <form class="config-form" method="post" action="{{ url_for('main.apply_settings') }}">
+                <input type="hidden" name="_action_token" value="{{ action_token }}">
                 <input type="hidden" name="interface" value="{{ nic.name }}">
 
                 <div>
@@ -114,15 +116,22 @@
 
                 <div class="actions">
                     <button class="btn" type="submit">Apply</button>
+                    <button class="btn secondary" type="submit" form="restore-{{ loop.index }}">Restore previous</button>
                     <button class="btn warn dhcp-action" type="submit" form="release-{{ loop.index }}" {% if nic.dhcp_raw != 'Enabled' %}hidden{% endif %}>Release</button>
                     <button class="btn secondary dhcp-action" type="submit" form="renew-{{ loop.index }}" {% if nic.dhcp_raw != 'Enabled' %}hidden{% endif %}>Renew</button>
                 </div>
             </form>
 
+            <form id="restore-{{ loop.index }}" method="post" action="{{ url_for('main.restore_network') }}">
+                <input type="hidden" name="_action_token" value="{{ action_token }}">
+                <input type="hidden" name="interface" value="{{ nic.name }}">
+            </form>
             <form id="release-{{ loop.index }}" method="post" action="{{ url_for('main.dhcp_release') }}">
+                <input type="hidden" name="_action_token" value="{{ action_token }}">
                 <input type="hidden" name="interface" value="{{ nic.name }}">
             </form>
             <form id="renew-{{ loop.index }}" method="post" action="{{ url_for('main.dhcp_renew') }}">
+                <input type="hidden" name="_action_token" value="{{ action_token }}">
                 <input type="hidden" name="interface" value="{{ nic.name }}">
             </form>
         </div>

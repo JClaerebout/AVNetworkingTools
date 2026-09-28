@@ -241,6 +241,10 @@ def _normalize_blocks(raw_blocks):
             value = str(raw.get("value", ""))
             if not value:
                 raise ValueError("Command blocks cannot be empty.")
+            try:
+                _parse_send_data(value, bool(raw.get("is_hex")), bool(raw.get("add_cr")), bool(raw.get("add_lf")))
+            except (ValueError, UnicodeError) as exc:
+                raise ValueError(f"Invalid command bytes: {exc}") from exc
             blocks.append({
                 "type": kind, "value": value, "is_hex": bool(raw.get("is_hex")),
                 "add_cr": bool(raw.get("add_cr")), "add_lf": bool(raw.get("add_lf")),
@@ -277,6 +281,9 @@ def _run_script(blocks):
     connections = []
     target_settings = None
     completed = False
+    outcomes = {"targets_connected": 0, "targets_failed": 0, "commands_sent": 0,
+                "commands_failed": 0, "commands_skipped": 0, "errors": 0}
+    outcomes_lock = threading.Lock()
     try:
         _log("Script started.")
         for index, block in enumerate(blocks):
@@ -300,6 +307,8 @@ def _run_script(blocks):
                         connection = _connect_one(target, block)
                         if connection:
                             connections.append(connection)
+                outcomes["targets_connected"] += len(connections)
+                outcomes["targets_failed"] += len(block["targets"]) - len(connections)
                 if not connections and not _stop.is_set():
                     _log("No targets in this group could be reached.", "error")
             elif block["type"] == "delay":
@@ -313,12 +322,18 @@ def _run_script(blocks):
                     _log(f"Invalid command: {exc}", "error")
                     continue
                 display = _format_bytes(payload, block["is_hex"])
+                if not connections:
+                    outcomes["commands_skipped"] += 1
 
                 def send_one(connection):
                     try:
                         connection.send(payload)
+                        with outcomes_lock:
+                            outcomes["commands_sent"] += 1
                         _log(f"TX {connection.label}: {display}", "tx")
                     except Exception as exc:
+                        with outcomes_lock:
+                            outcomes["commands_failed"] += 1
                         _log(f"Send failed for {connection.label}: {exc}", "error")
 
                 if target_settings and target_settings["mode"] == "parallel":
@@ -333,19 +348,23 @@ def _run_script(blocks):
                             break
         completed = not _stop.is_set()
     except Exception as exc:
+        outcomes["errors"] += 1
         _log(f"Script error: {exc}", "error")
     finally:
         _wait_for_final_responses(connections)
         for connection in connections:
             connection.close()
-        if completed:
-            _log("Script completed.", "success")
-            status = "Completed"
-        else:
-            _log("Script stopped.", "warning")
+        errors = outcomes["targets_failed"] + outcomes["commands_failed"] + outcomes["errors"]
+        if _stop.is_set():
             status = "Stopped"
+        elif errors or not completed:
+            status = "Completed with errors" if outcomes["commands_sent"] else "Failed"
+        else:
+            status = "Completed"
+        _log(f"{status}. Targets connected/failed: {outcomes['targets_connected']}/{outcomes['targets_failed']}; commands sent/failed/skipped: {outcomes['commands_sent']}/{outcomes['commands_failed']}/{outcomes['commands_skipped']}.",
+             "success" if status == "Completed" else "warning" if status == "Stopped" else "error")
         _pause.clear()
-        _set_state(running=False, paused=False, status_text=status, current_block=None)
+        _set_state(running=False, paused=False, status_text=status, current_block=None, outcomes=outcomes)
 
 
 def start_script(raw_blocks):
@@ -358,7 +377,7 @@ def start_script(raw_blocks):
         if _state["running"]:
             return False, "A script is already running."
         _state["output"].clear()
-        _state.update(running=True, paused=False, status_text="Running", current_block=None)
+        _state.update(running=True, paused=False, status_text="Running", current_block=None, outcomes={})
     _stop.clear()
     _pause.clear()
     _thread = threading.Thread(target=_run_script, args=(blocks,), daemon=True)
@@ -399,4 +418,5 @@ def get_script_status():
             "status_text": _state["status_text"],
             "current_block": _state["current_block"],
             "output": list(_state["output"]),
+            "outcomes": dict(_state.get("outcomes", {})),
         }

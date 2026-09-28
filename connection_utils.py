@@ -3,7 +3,6 @@ import socket
 import threading
 from collections import deque
 from datetime import datetime
-from typing import Dict, Optional
 
 try:
     import paramiko  # type: ignore
@@ -17,22 +16,60 @@ except Exception:
     serial = None
     list_ports = None
 
-_conn_lock = threading.Lock()
-_conn_stop = threading.Event()
-_conn_socket: Optional[socket.socket] = None
-_conn_ssh_client = None
-_conn_ssh_channel = None
-_conn_thread: Optional[threading.Thread] = None
-_conn_running = False
-_conn_protocol = ""
-_conn_target = ""
+_conn_lock = threading.RLock()
 _conn_output = deque(maxlen=1000)
-_conn_serial = None
-_conn_status_text = ""
+_session = None
 
-def _append(line: str) -> None:
+
+class _Session:
+    def __init__(self, protocol, target):
+        self.protocol = protocol
+        self.target = target
+        self.state = "Connecting"
+        self.message = f"Connecting to {target}..."
+        self.stop = threading.Event()
+        self.send_lock = threading.Lock()
+        self.resources = []
+        self.transport = None
+        self.thread = None
+
+
+def _own(session, resource):
     with _conn_lock:
-        _conn_output.append(line)
+        cancelled = session.stop.is_set()
+        if not cancelled:
+            session.resources.append(resource)
+    if cancelled:
+        resource.close()
+        raise RuntimeError("Connection cancelled.")
+    return resource
+
+
+def _close_resources(session):
+    with _conn_lock:
+        resources, session.resources = session.resources, []
+    for resource in reversed(resources):
+        try:
+            resource.close()
+        except Exception:
+            pass
+
+
+def _finish(session, state, message):
+    session.stop.set()
+    with _conn_lock:
+        session.state, session.message = state, message
+        if _session is session:
+            _conn_output.append(f"[{_stamp()}] {message}")
+    _close_resources(session)
+
+
+def _record(session, data, direction="RX", sent_as_hex=False):
+    with _conn_lock:
+        if _session is session and not session.stop.is_set():
+            _conn_output.append({"time": _stamp(), "direction": direction,
+                                 "ascii": _format_bytes(data), "hex": _format_bytes(data, True),
+                                 "sent_as_hex": sent_as_hex})
 
 
 def _stamp() -> str:
@@ -78,304 +115,156 @@ def _parse_send_data(value: str, is_hex: bool, add_cr: bool, add_lf: bool) -> by
     return data
 
 
-def _tcp_reader(sock: socket.socket) -> None:
-    while not _conn_stop.is_set():
-        try:
-            data = sock.recv(4096)
-            if not data:
-                _mark_connection_closed("Connection closed by remote host.")
-                break
-            _append({
-                "time": _stamp(),
-                "direction": "RX",
-                "ascii": _format_bytes(data, False),
-                "hex": _format_bytes(data, True),
-            })
-        except socket.timeout:
-            continue
-        except OSError:
-            break
-        except Exception as exc:
-            _append(f"[{_stamp()}] RX error: {exc}")
-            break
-
-
-def _udp_reader(sock: socket.socket) -> None:
-    while not _conn_stop.is_set():
-        try:
-            data = sock.recv(4096)
-            if data:
-                _append({
-                    "time": _stamp(),
-                    "direction": "RX",
-                    "ascii": _format_bytes(data, False),
-                    "hex": _format_bytes(data, True),
-                })
-        except socket.timeout:
-            continue
-        except OSError:
-            break
-        except Exception as exc:
-            _append(f"[{_stamp()}] UDP RX error: {exc}")
-            break
-
-
-def _ssh_reader(channel) -> None:
-    while not _conn_stop.is_set():
-        try:
-            if channel.recv_ready():
-                data = channel.recv(4096)
+def _reader(session):
+    transport = session.transport
+    try:
+        while not session.stop.is_set():
+            try:
+                if session.protocol == "ssh":
+                    if not transport.recv_ready():
+                        if transport.closed or transport.eof_received:
+                            _finish(session, "Disconnected", "SSH channel closed.")
+                            return
+                        session.stop.wait(0.05)
+                        continue
+                    data = transport.recv(4096)
+                elif session.protocol == "rs232":
+                    data = transport.read(4096)
+                else:
+                    data = transport.recv(65535 if session.protocol == "udp" else 4096)
                 if data:
-                    _append({
-                        "time": _stamp(),
-                        "direction": "RX",
-                        "ascii": _format_bytes(data, False),
-                        "hex": _format_bytes(data, True),
-                    })
+                    _record(session, data)
+                elif session.protocol not in {"rs232", "udp"}:
+                    _finish(session, "Disconnected", "Connection closed by remote host.")
+                    return
+            except (socket.timeout, TimeoutError):
                 continue
-            if channel.closed:
-                _mark_connection_closed("SSH channel closed.")
-                break
-            _conn_stop.wait(0.1)
-        except Exception as exc:
-            _append(f"[{_stamp()}] SSH RX error: {exc}")
-            break
+    except Exception as exc:
+        if not session.stop.is_set():
+            _finish(session, "Failed", f"Receive failed: {exc}")
+    finally:
+        _close_resources(session)
 
-def _serial_reader(ser) -> None:
-    while not _conn_stop.is_set():
-        try:
-            data = ser.read(4096)
-            if data:
-                _append(f"[{_stamp()}] RX\n{_format_bytes(data)}")
-        except Exception as exc:
-            _mark_connection_closed(f"RS232 RX error: {exc}")
-            break
 
-def start_connection(
-    protocol: str,
-    host: str,
-    port: str,
-    username: str = "",
-    password: str = "",
-    baudrate: str = "9600",
-    databits: str = "8",
-    parity: str = "N",
-    stopbits: str = "1",
-) -> tuple[bool, str]:
-    global _conn_socket, _conn_thread, _conn_running, _conn_protocol, _conn_target, _conn_ssh_client, _conn_ssh_channel, _conn_serial, _conn_status_text
-
-    protocol = (protocol or "").strip().lower()
-    host = (host or "").strip()
-
+def start_connection(protocol, host, port, username="", password="", baudrate="9600",
+                     databits="8", parity="N", stopbits="1"):
+    global _session
+    protocol, host = str(protocol or "").strip().lower(), str(host or "").strip()
     if protocol not in {"tcp", "udp", "telnet", "ssh", "rs232"}:
         return False, "Select TCP, UDP, Telnet, SSH or RS232."
-    if protocol == "rs232":
-        if not host:
-            return False, "COM port is required."
-    else:
-        if not host:
-            return False, "IP/host is required."
-
-    port_int = None
-
-    if protocol != "rs232":
-        try:
-            port_int = int(port)
-            if port_int < 1 or port_int > 65535:
-                raise ValueError
-        except Exception:
-            return False, "Port must be between 1 and 65535."
-
+    if not host:
+        return False, "COM port is required." if protocol == "rs232" else "IP/host is required."
+    try:
+        if protocol == "rs232":
+            if serial is None:
+                return False, "RS232 requires pyserial."
+            serial_options = dict(baudrate=int(baudrate), bytesize=int(databits), parity=parity,
+                                  stopbits=float(stopbits), timeout=0.25, write_timeout=2)
+        else:
+            port = int(port)
+            if not 1 <= port <= 65535:
+                raise ValueError()
+    except (ValueError, TypeError):
+        return False, "Invalid serial settings or port (1-65535)."
+    if protocol == "ssh" and (paramiko is None or not username):
+        return False, "SSH requires paramiko and a username."
+    session = _Session(protocol, host if protocol == "rs232" else f"{host}:{port}")
     with _conn_lock:
-        if _conn_running:
-            return False, "A connection is already running. Stop it first."
+        if _session and _session.state in {"Connecting", "Connected", "Stopping"}:
+            return False, "A connection is already active. Stop it first."
+        _session = session
         _conn_output.clear()
-        _conn_stop.clear()
-
     try:
         if protocol in {"tcp", "telnet"}:
-            sock = socket.create_connection((host, port_int), timeout=5)
-            sock.settimeout(0.25)
-            _conn_socket = sock
-            _conn_thread = threading.Thread(target=_tcp_reader, args=(sock,), daemon=True)
-            _conn_thread.start()
-
+            transport = _own(session, socket.create_connection((host, port), timeout=5))
+            transport.settimeout(0.25)
         elif protocol == "udp":
-            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sock.settimeout(0.25)
-            sock.connect((host, port_int))
-            _conn_socket = sock
-            _conn_thread = threading.Thread(target=_udp_reader, args=(sock,), daemon=True)
-            _conn_thread.start()
-        
+            transport = _own(session, socket.socket(socket.AF_INET, socket.SOCK_DGRAM))
+            transport.settimeout(0.25)
+            transport.connect((host, port))
         elif protocol == "rs232":
-            if serial is None:
-                return False, "RS232 requires pyserial. Install it with: pip install pyserial"
-
-            baud_int = int(baudrate)
-
-            ser = serial.Serial(
-                port=host,
-                baudrate=baud_int,
-                bytesize=int(databits),
-                parity=parity,
-                stopbits=float(stopbits),
-                timeout=0.25,
-                write_timeout=2,
-            )
-
-            _conn_serial = ser
-            _conn_thread = threading.Thread(target=_serial_reader, args=(ser,), daemon=True)
-            _conn_thread.start()
-
-        elif protocol == "ssh":
-            if paramiko is None:
-                return False, "SSH requires paramiko. Install it with: pip install paramiko"
-            if not username:
-                return False, "SSH username is required."
-
-            client = paramiko.SSHClient()
-            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            client.connect(hostname=host, port=port_int, username=username, password=password or None, timeout=7, look_for_keys=True, allow_agent=True)
-            channel = client.invoke_shell()
-            channel.settimeout(0.0)
-            _conn_ssh_client = client
-            _conn_ssh_channel = channel
-            _conn_thread = threading.Thread(target=_ssh_reader, args=(channel,), daemon=True)
-            _conn_thread.start()
-
-    except Exception as exc:
-        stop_connection()
-        return False, f"Could not open {protocol.upper()} connection: {exc}"
-
-    with _conn_lock:
-        _conn_running = True
-        _conn_protocol = protocol
-        if protocol == "udp":
-            _conn_target = f"{host}:{port_int}"
-            _conn_status_text = f"UDP socket opened for {host}:{port_int}"
-
-        elif protocol == "rs232":
-            _conn_target = host
-            _conn_status_text = f"RS232 open on {host}"
-
+            transport = _own(session, serial.Serial(port=host, **serial_options))
         else:
-            _conn_target = f"{host}:{port_int}"
-            _conn_status_text = f"{protocol.upper()} connected to {host}:{port_int}"
+            client = _own(session, paramiko.SSHClient())
+            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            client.connect(hostname=host, port=port, username=username, password=password or None,
+                           timeout=7, banner_timeout=7, auth_timeout=7, channel_timeout=7,
+                           look_for_keys=True, allow_agent=True)
+            transport = _own(session, client.invoke_shell())
+            transport.settimeout(2)
+        with _conn_lock:
+            if session.stop.is_set() or _session is not session:
+                raise RuntimeError("Connection cancelled.")
+            session.transport = transport
+            session.state = "Connected"
+            session.message = f"{protocol.upper()} {'socket open for' if protocol == 'udp' else 'connected to'} {session.target}"
+            _conn_output.append(f"[{_stamp()}] {session.message}")
+            session.thread = threading.Thread(target=_reader, args=(session,), daemon=True)
+            session.thread.start()
+        return True, "Connection opened."
+    except Exception as exc:
+        cancelled = session.stop.is_set()
+        message = "Connection cancelled." if cancelled else f"Could not open {protocol.upper()} connection: {exc}"
+        _finish(session, "Disconnected" if cancelled else "Failed", message)
+        return False, message
 
-    if protocol == "rs232":
-        _append(f"[{_stamp()}] Connected using RS232 to {host} @ {baudrate} baud")
-    elif protocol == "udp":
-        _append(f"[{_stamp()}] {protocol.upper()} socket opened for {host}:{port_int}")
-    else:
-        _append(f"[{_stamp()}] Connected using {protocol.upper()} to {host}:{port_int}")
-    return True, "Connection opened."
 
-
-def send_data(value: str, is_hex: bool = False, add_cr: bool = False, add_lf: bool = False) -> tuple[bool, str]:
+def send_data(value, is_hex=False, add_cr=False, add_lf=False):
     with _conn_lock:
-        running = _conn_running
-        protocol = _conn_protocol
-        sock = _conn_socket
-        channel = _conn_ssh_channel
-
-    if not running:
-        return False, "No active connection."
-
+        session = _session
+        if not session or session.state != "Connected":
+            return False, "No active connection."
     try:
         data = _parse_send_data(value, is_hex, add_cr, add_lf)
-    except ValueError as exc:
+    except (ValueError, TypeError, AttributeError) as exc:
         return False, str(exc)
-
     if not data:
         return False, "Nothing to send."
-
     try:
-        if protocol == "ssh":
-            if channel is None or channel.closed:
-                _mark_connection_closed("SSH channel closed.")
-                return False, "SSH channel is closed."
-            channel.send(data)
-        elif protocol == "rs232":
-            global _conn_serial
-            assert _conn_serial is not None
-            _conn_serial.write(data)
-        else:
-            assert sock is not None
-            sock.sendall(data)
-        _append({
-            "time": _stamp(),
-            "direction": "TX",
-            "ascii": _format_bytes(data, False),
-            "hex": _format_bytes(data, True),
-            "sent_as_hex": is_hex,
-        })
+        with session.send_lock:
+            if session.stop.is_set():
+                return False, "Connection closed."
+            if session.protocol == "rs232":
+                written = session.transport.write(data)
+                if written != len(data):
+                    raise OSError(f"Only {written} of {len(data)} bytes written")
+            else:
+                session.transport.sendall(data)
+            if session.stop.is_set():
+                return False, "Connection closed during send; delivery is unconfirmed."
+            _record(session, data, "TX", is_hex)
         return True, "Data sent."
     except Exception as exc:
-        return False, f"Send failed: {exc}"
+        message = f"Send failed; delivery may be partial: {exc}"
+        _finish(session, "Failed", message)
+        return False, message
 
 
-def stop_connection() -> tuple[bool, str]:
-    global _conn_socket, _conn_running, _conn_protocol, _conn_target, _conn_ssh_client, _conn_ssh_channel, _conn_serial, _conn_status_text
-
+def stop_connection():
     with _conn_lock:
-        was_running = _conn_running
-        sock = _conn_socket
-        ssh_client = _conn_ssh_client
-        ssh_channel = _conn_ssh_channel
-        target = _conn_target
-        protocol = _conn_protocol
-        _conn_running = False
-        _conn_protocol = ""
-        _conn_target = ""
-        _conn_socket = None
-        _conn_ssh_client = None
-        _conn_ssh_channel = None
-        ser = _conn_serial
-        _conn_serial = None
-        _conn_status_text = ""
-
-    _conn_stop.set()
-
-    try:
-        if sock:
-            sock.close()
-    except Exception:
-        pass
-    try:
-        if ssh_channel:
-            ssh_channel.close()
-    except Exception:
-        pass
-    try:
-        if ssh_client:
-            ssh_client.close()
-    except Exception:
-        pass
-    try:
-        if ser:
-            ser.close()
-    except Exception:
-        pass
-
-    if was_running:
-        if protocol == "udp":
-            _append(f"[{_stamp()}] UDP socket closed for {target}.")
-        else:
-            _append(f"[{_stamp()}] Disconnected from {target}.")
-        return True, "Connection closed."
-    return False, "No active connection."
+        session = _session
+        if not session or session.state not in {"Connecting", "Connected", "Stopping"}:
+            return False, "No active connection."
+        session.state = "Stopping"
+        session.stop.set()
+    _close_resources(session)
+    if session.thread and session.thread is not threading.current_thread():
+        session.thread.join(timeout=1)
+    _finish(session, "Disconnected", f"Disconnected from {session.target}.")
+    return True, "Connection closed."
 
 
-def get_connection_status() -> Dict:
+def get_connection_status():
     with _conn_lock:
-        return {
-            "running": _conn_running,
-            "protocol": _conn_protocol,
-            "target": _conn_target,
-            "status_text": _conn_status_text,
-            "output": list(_conn_output),
-        }
+        session = _session
+        state = session.state if session else "Disconnected"
+        return {"running": state in {"Connecting", "Connected", "Stopping"},
+                "connected": state == "Connected", "state": state,
+                "protocol": session.protocol if session else "",
+                "target": session.target if session else "",
+                "status_text": session.message if session else "Disconnected",
+                "output": list(_conn_output)}
+
 
 def get_serial_ports() -> list[dict]:
     if list_ports is None:
@@ -390,25 +279,3 @@ def get_serial_ports() -> list[dict]:
         })
 
     return ports
-
-def _mark_connection_closed(reason: str = "") -> None:
-    global _conn_running, _conn_protocol, _conn_target, _conn_socket
-    global _conn_ssh_client, _conn_ssh_channel, _conn_serial
-
-    with _conn_lock:
-        if not _conn_running:
-            return
-
-        _conn_running = False
-        _conn_protocol = ""
-        _conn_target = ""
-
-        _conn_socket = None
-        _conn_ssh_client = None
-        _conn_ssh_channel = None
-        _conn_serial = None
-
-    _conn_stop.set()
-
-    if reason:
-        _append(f"[{_stamp()}] {reason}")

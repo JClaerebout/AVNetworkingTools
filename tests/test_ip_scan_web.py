@@ -1,3 +1,4 @@
+from http_test_support import authorized_client
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -7,7 +8,7 @@ from scan_utils import probe_web_services
 
 class IpScanWebTests(unittest.TestCase):
     def test_ip_scan_context_menu_has_detail_copy_actions(self):
-        response = app.test_client().get("/ip-scan")
+        response = authorized_client(app).get("/ip-scan")
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'id="copyHostnameButton"', response.data)
@@ -38,7 +39,7 @@ class IpScanWebTests(unittest.TestCase):
             "results": [{"ip": "192.168.1.20", "web_services": ["https"]}]
         }
 
-        response = app.test_client().post(
+        response = authorized_client(app).post(
             "/ip-scan/open-web",
             json={"ip": "192.168.1.20", "scheme": "https"},
         )
@@ -54,7 +55,7 @@ class IpScanWebTests(unittest.TestCase):
             "results": [{"ip": "192.168.1.20", "web_services": []}]
         }
 
-        response = app.test_client().post(
+        response = authorized_client(app).post(
             "/ip-scan/open-web",
             json={"ip": "192.168.1.20", "scheme": "http"},
         )

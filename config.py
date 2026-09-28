@@ -1,10 +1,11 @@
 from pathlib import Path
 import os
+import secrets
 import sys
 
 
 APP_NAME = "AVNetworkingTools"
-SECRET_KEY = os.getenv("AVNETWORKINGTOOLS_SECRET_KEY", "local-avnetworkingtools-secret")
+SECRET_KEY = os.getenv("AVNETWORKINGTOOLS_SECRET_KEY", secrets.token_hex(32))
 MANUFACTURER_ONLINE_FALLBACK = os.getenv(
     "AVNETWORKINGTOOLS_ONLINE_VENDOR_LOOKUP", "0"
 ).strip().lower() in {"1", "true", "yes", "on"}

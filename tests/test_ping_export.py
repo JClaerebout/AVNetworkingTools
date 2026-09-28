@@ -1,3 +1,4 @@
+from http_test_support import authorized_client
 import unittest
 from unittest.mock import patch
 
@@ -18,7 +19,7 @@ class PingExportTests(unittest.TestCase):
             "history": ["192.168.1.1"],
         }
 
-        response = app.test_client().get("/ping/export.txt")
+        response = authorized_client(app).get("/ping/export.txt")
         content = response.data.decode("utf-8")
 
         self.assertEqual(response.status_code, 200)
@@ -31,7 +32,7 @@ class PingExportTests(unittest.TestCase):
 
     @patch("routes.get_ping_status", return_value={"output": []})
     def test_txt_export_handles_empty_output(self, _get_ping_status):
-        response = app.test_client().get("/ping/export.txt")
+        response = authorized_client(app).get("/ping/export.txt")
 
         self.assertEqual(response.data.decode("utf-8"), "No ping output available.\r\n")
 

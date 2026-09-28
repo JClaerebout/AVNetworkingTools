@@ -9,7 +9,7 @@ from flask import Blueprint, Response, flash, jsonify, redirect, render_template
 
 from history import load_history
 from ping_utils import get_ping_status, load_ping_history, start_ping, stop_ping
-from nic_utils import clean_dns, get_nics, release_dhcp, renew_dhcp, set_dhcp, set_static, set_interface_metric
+from nic_utils import clean_dns, get_nics, release_dhcp, renew_dhcp, set_dhcp, set_static, set_interface_metric, restore_previous_config
 from scan_utils import get_monitor_log, get_scannable_nics, get_scan_status, start_lookup, start_scan, stop_scan, start_monitor, stop_monitor, set_monitor_paused
 from connection_utils import get_connection_status, get_serial_ports, send_data, start_connection, stop_connection
 from system_utils import is_admin
@@ -22,7 +22,7 @@ from connection_history import (
 from command_utils import run_command
 from export_utils import SaveCancelled, save_export
 from update_utils import check_for_update, get_update_state, install_downloaded_update, start_update_download
-from multicast_utils import get_multicast_status, start_multicast_test, stop_multicast_test
+from multicast_utils import get_multicast_status, start_multicast_test, stop_multicast_test, touch_multicast_capture
 from script_utils import get_script_status, set_script_paused, start_script, stop_script
 from script_history import delete_script, get_script, list_scripts, save_script
 
@@ -126,6 +126,13 @@ def dhcp_release():
     return redirect(url_for("main.index"))
 
 
+@main_bp.route("/restore-network", methods=["POST"])
+def restore_network():
+    success, message = restore_previous_config(request.form.get("interface", "").strip())
+    flash(message, "success" if success and "WARNING" not in message else "error")
+    return redirect(url_for("main.index"))
+
+
 @main_bp.route("/renew", methods=["POST"])
 def dhcp_renew():
     interface_name = request.form.get("interface", "").strip()
@@ -148,13 +155,13 @@ def ping_start():
     data = request.get_json(silent=True) or {}
     ip = data.get("ip", "")
     success, message = start_ping(ip)
-    return jsonify({"success": success, "message": message, **get_ping_status()})
+    return jsonify({**get_ping_status(), "success": success, "message": message})
 
 
 @main_bp.route("/ping/stop", methods=["POST"])
 def ping_stop():
     success, message = stop_ping()
-    return jsonify({"success": success, "message": message, **get_ping_status()})
+    return jsonify({**get_ping_status(), "success": success, "message": message})
 
 
 @main_bp.route("/ping/status")
@@ -230,7 +237,7 @@ def connection_test_start():
         data.get("parity", "N"),
         data.get("stopbits", "1"),
     )
-    return jsonify({"success": success, "message": message, **get_connection_status()})
+    return jsonify({**get_connection_status(), "success": success, "message": message})
 
 @main_bp.route("/connection-test/serial-ports")
 def connection_test_serial_ports():
@@ -245,13 +252,13 @@ def connection_test_send():
         bool(data.get("add_cr", False)),
         bool(data.get("add_lf", False)),
     )
-    return jsonify({"success": success, "message": message, **get_connection_status()})
+    return jsonify({**get_connection_status(), "success": success, "message": message})
 
 
 @main_bp.route("/connection-test/stop", methods=["POST"])
 def connection_test_stop():
     success, message = stop_connection()
-    return jsonify({"success": success, "message": message, **get_connection_status()})
+    return jsonify({**get_connection_status(), "success": success, "message": message})
 
 
 @main_bp.route("/connection-test/status")
@@ -268,20 +275,20 @@ def scripts_page():
 def scripts_start():
     data = request.get_json(silent=True) or {}
     success, message = start_script(data.get("blocks"))
-    return jsonify({"success": success, "message": message, **get_script_status()}), 200 if success else 409
+    return jsonify({**get_script_status(), "success": success, "message": message}), 200 if success else 409
 
 
 @main_bp.route("/scripts/pause", methods=["POST"])
 def scripts_pause():
     data = request.get_json(silent=True) or {}
     success, message = set_script_paused(bool(data.get("paused")))
-    return jsonify({"success": success, "message": message, **get_script_status()}), 200 if success else 409
+    return jsonify({**get_script_status(), "success": success, "message": message}), 200 if success else 409
 
 
 @main_bp.route("/scripts/stop", methods=["POST"])
 def scripts_stop():
     success, message = stop_script()
-    return jsonify({"success": success, "message": message, **get_script_status()}), 200 if success else 409
+    return jsonify({**get_script_status(), "success": success, "message": message}), 200 if success else 409
 
 
 @main_bp.route("/scripts/status")
@@ -388,19 +395,19 @@ def ip_scan_start():
     quick_scan = bool(data.get("quick_scan", False))
 
     success, message = start_scan(interface_name, custom_subnet, quick_scan)
-    return jsonify({"success": success, "message": message, **get_scan_status()})
+    return jsonify({**get_scan_status(), "success": success, "message": message})
 
 
 @main_bp.route("/ip-scan/stop", methods=["POST"])
 def ip_scan_stop():
     success, message = stop_scan()
-    return jsonify({"success": success, "message": message, **get_scan_status()})
+    return jsonify({**get_scan_status(), "success": success, "message": message})
 
 
 @main_bp.route("/ip-scan/lookup", methods=["POST"])
 def ip_scan_lookup():
     success, message = start_lookup()
-    return jsonify({"success": success, "message": message, **get_scan_status()})
+    return jsonify({**get_scan_status(), "success": success, "message": message})
 
 
 @main_bp.route("/ip-scan/status")
@@ -449,7 +456,7 @@ def _scan_result_status(item):
     if item.get("missing"):
         return "Missing"
     if item.get("duplicate_ip"):
-        return "Duplicate IP"
+        return "Possible IP conflict"
     return "OK"
 
 
@@ -507,13 +514,13 @@ def ip_scan_export():
 @main_bp.route("/ip-scan/monitor/start", methods=["POST"])
 def ip_scan_monitor_start():
     success, message = start_monitor()
-    return jsonify({"success": success, "message": message, **get_scan_status()})
+    return jsonify({**get_scan_status(), "success": success, "message": message})
 
 
 @main_bp.route("/ip-scan/monitor/stop", methods=["POST"])
 def ip_scan_monitor_stop():
     success, message = stop_monitor()
-    return jsonify({"success": success, "message": message, **get_scan_status()})
+    return jsonify({**get_scan_status(), "success": success, "message": message})
 
 
 @main_bp.route("/ip-scan/monitor/export.txt", methods=["GET", "POST"])
@@ -556,7 +563,7 @@ def ip_scan_monitor_pause():
     paused = bool(data.get("paused", False))
 
     success, message = set_monitor_paused(paused)
-    return jsonify({"success": success, "message": message, **get_scan_status()})
+    return jsonify({**get_scan_status(), "success": success, "message": message})
 
 @main_bp.route("/wifi-scan")
 def wifi_scan_page():
@@ -566,13 +573,13 @@ def wifi_scan_page():
 @main_bp.route("/wifi-scan/start", methods=["POST"])
 def wifi_scan_start():
     success, message = start_wifi_scan()
-    return jsonify({"success": success, "message": message, **get_wifi_status()})
+    return jsonify({**get_wifi_status(), "success": success, "message": message})
 
 
 @main_bp.route("/wifi-scan/stop", methods=["POST"])
 def wifi_scan_stop():
     success, message = stop_wifi_scan()
-    return jsonify({"success": success, "message": message, **get_wifi_status()})
+    return jsonify({**get_wifi_status(), "success": success, "message": message})
 
 
 @main_bp.route("/wifi-scan/status")
@@ -594,24 +601,28 @@ def multicast_page():
 def multicast_start():
     data = request.get_json(silent=True) or {}
     success, message = start_multicast_test(data.get("interface", ""))
-    return jsonify({"success": success, "message": message, **get_multicast_status()})
+    return jsonify({**get_multicast_status(), "success": success, "message": message})
 
 
 @main_bp.route("/multicast/stop", methods=["POST"])
 def multicast_stop():
     success, message = stop_multicast_test()
-    return jsonify({"success": success, "message": message, **get_multicast_status()})
+    return jsonify({**get_multicast_status(), "success": success, "message": message})
 
 
 @main_bp.route("/multicast/status")
 def multicast_status():
+    touch_multicast_capture()
     return jsonify(get_multicast_status())
 
 
 def _multicast_report_content(status):
+    from copy import deepcopy
+    from analyzer_health import apply_health
+    status = apply_health(deepcopy(status))
     counts = status.get("igmp_counts", {})
     lines = [
-        "AVNetworkingTools - IGMP / Multicast Health Report",
+        "AVNetworkingTools - AV Network Health Check Report",
         "=" * 52,
         f"Interface: {status.get('interface') or '-'}",
         f"IP: {status.get('ip') or '-'}",
@@ -643,7 +654,7 @@ def _multicast_report_content(status):
         lines.append("Group | Service | Packets/s at stop | Mbps at stop | Total packets | Joined | Assessment")
         for item in groups:
             membership = "Unknown" if not item.get("membership_known") else ("Yes" if item.get("joined") else "No")
-            assessment = "Flooding suspected" if item.get("suspected_flood") else "Normal"
+            assessment = item.get("assessment", "Observed")
             lines.append(
                 f"{item.get('address', '-')} | {item.get('service', 'Unknown')} | "
                 f"{item.get('packets_per_second', 0):.1f} | {item.get('mbps', 0):.3f} | "
@@ -653,10 +664,30 @@ def _multicast_report_content(status):
         lines.append("No multicast traffic observed.")
 
     lines.extend(["", "Warnings", "--------"])
-    warnings = status.get("warnings", [])
+    warnings = [w for w in status.get("warnings", []) if w.get("severity") != "information"]
     lines.extend((f"[{item.get('severity', 'warning').upper()}] {item.get('message', '')}" for item in warnings))
     if not warnings:
         lines.append("No health warnings detected.")
+    # Preserve the original human-readable group report and include the full analyzer snapshot.
+    import json
+    lines.extend(["", "Analyzer details (JSON)", "-----------------------",
+                  json.dumps({key: status.get(key, []) for key in
+                              ("warnings", "diagnostic_information", "groups", "streams", "ptp_sources", "ptp_domains", "dscp_distribution",
+                               "igmp_events", "malformed_packets", "unrecognized_ptp_candidates", "evicted_records")}, indent=2),
+                  "", "IPv4 visible on the selected port only. No switch queue, VLAN/PCP or Layer-2 PTP verification.",
+                  "RTP loss and arrival-spacing jitter are capture estimates; NIC offloading may affect results."])
+    from analyzer_health import assess
+    health = assess(status)
+    summary = ["NETWORK HEALTH SUMMARY", "=" * 22,
+               f"Overall: {health['health_status']}", f"Confidence: {health['health_confidence']}",
+               health["health_message"], ""]
+    for area, check in health["health_checks"].items():
+        summary.append(f"{area.upper()}: {check['status']} - {check['summary']}. {check['detail']}")
+    summary.extend(["", "Findings:"])
+    summary.extend(f"- [{f['level']}] {f['title']} {f['detail']}" for f in health["actionable_findings"])
+    if not health["actionable_findings"]:
+        summary.append("- No problems detected in observed traffic.")
+    lines = summary + ["", "TECHNICAL DETAILS", "=" * 17, ""] + lines
     return "\r\n".join(lines) + "\r\n"
 
 

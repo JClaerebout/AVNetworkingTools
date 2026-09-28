@@ -1,3 +1,4 @@
+from http_test_support import authorized_client
 import tempfile
 import unittest
 from pathlib import Path
@@ -28,7 +29,7 @@ class ConnectionExportTests(unittest.TestCase):
             ]
         }
 
-        response = app.test_client().get("/connection-test/export.txt")
+        response = authorized_client(app).get("/connection-test/export.txt")
         content = response.data.decode("utf-8")
 
         self.assertEqual(response.status_code, 200)
@@ -39,7 +40,7 @@ class ConnectionExportTests(unittest.TestCase):
 
     @patch("routes.get_connection_status", return_value={"output": []})
     def test_txt_export_requires_a_connection_session(self, _get_connection_status):
-        response = app.test_client().post("/connection-test/export.txt")
+        response = authorized_client(app).post("/connection-test/export.txt")
 
         self.assertEqual(response.status_code, 409)
         self.assertFalse(response.get_json()["success"])
@@ -47,7 +48,7 @@ class ConnectionExportTests(unittest.TestCase):
     @patch("routes.get_connection_status", return_value={"output": ["Connected"]})
     def test_post_saves_connection_txt_in_selected_location(self, _get_connection_status):
         with tempfile.TemporaryDirectory() as temp_dir, patch("export_utils.choose_save_path", side_effect=lambda filename: Path(temp_dir) / filename):
-            response = app.test_client().post("/connection-test/export.txt")
+            response = authorized_client(app).post("/connection-test/export.txt")
             data = response.get_json()
             saved_path = Path(data["path"])
 
