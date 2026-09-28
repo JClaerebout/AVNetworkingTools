@@ -52,4 +52,8 @@ python -m pip install -r requirements.txt
 python app.py
 ```
 
-Run the Python tests with `python -m unittest discover -s tests`. Build the Windows executable with `build.bat`; the application version is defined in [version.py](version.py).
+Run all checks with `check.bat`. Build the Windows executable with `build.bat`; see [BUILDING.md](BUILDING.md) for the packaged smoke check. The application version is defined in [version.py](version.py).
+
+## License
+
+MIT. See [LICENSE](LICENSE).

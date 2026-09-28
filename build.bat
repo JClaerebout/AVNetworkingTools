@@ -3,6 +3,12 @@ setlocal
 
 cd /d "%~dp0"
 
+python -c "import sys; sys.exit(0 if sys.version_info[:3] == (3, 14, 3) and sys.maxsize > 2**32 else 1)"
+if errorlevel 1 (
+    echo Build requires 64-bit Python 3.14.3.
+    exit /b 1
+)
+
 if not exist "manufacturer_data\ieee_manufacturers.json" (
     echo Missing bundled manufacturer database:
     echo manufacturer_data\ieee_manufacturers.json
@@ -16,10 +22,17 @@ if not defined APP_RELEASE_VERSION (
 )
 
 echo Installing build dependencies...
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-build.txt
 if errorlevel 1 (
     echo.
     echo Failed to install requirements.
+    exit /b 1
+)
+
+echo.
+call check.bat
+if errorlevel 1 (
+    echo Checks failed. Build cancelled.
     exit /b 1
 )
 

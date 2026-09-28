@@ -99,6 +99,9 @@ def run_desktop():
 
 
 if __name__ == "__main__":
+    if len(sys.argv) == 3 and sys.argv[1] == "--packaged-smoke":
+        from packaged_smoke import run as run_packaged_smoke
+        raise SystemExit(run_packaged_smoke(sys.modules["__main__"], sys.argv[2]))
     try:
         run_desktop()
     except PortInUseError as exc:

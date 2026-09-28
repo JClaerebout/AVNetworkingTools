@@ -1,5 +1,5 @@
-// Run by piping static/converter.js followed by this file to node.
 const assert = require('node:assert/strict');
+const {parseBytes, formatAscii} = require('../static/converter.js');
 assert.deepEqual(parseBytes('Hello\\r', 'ascii'), [72, 101, 108, 108, 111, 13]);
 assert.deepEqual(parseBytes('4865 6c,6C6F', 'hex'), [72, 101, 108, 108, 111]);
 assert.deepEqual(parseBytes('0, 127 255', 'decimal'), [0, 127, 255]);
