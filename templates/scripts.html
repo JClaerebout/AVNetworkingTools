@@ -46,8 +46,11 @@
             <button id="pauseScript" class="btn secondary" type="button" disabled>Pause</button>
             <button id="stopScript" class="btn warn" type="button" disabled>Stop</button>
         </div>
-        <div class="output-header">
+        <div class="log-toolbar">
             <h3>Activity log</h3>
+            <input id="scriptLogSearch" type="search" placeholder="Search log lines" aria-label="Search script activity log">
+            <span id="scriptLogCount" class="hint" role="status"></span>
+            <button id="scriptLogLatest" class="btn secondary" type="button">Latest</button>
             <button id="clearScriptLog" class="btn secondary" type="button">Clear view</button>
         </div>
         <pre id="scriptOutput" class="ping-output script-output">No script run yet.</pre>
@@ -135,8 +138,9 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='log_view.js') }}?v=2"></script>
 <script
-    src="{{ url_for('static', filename='scripts.js') }}?v=device-actions-1"
+    src="{{ url_for('static', filename='scripts.js') }}?v=log-view-1"
     data-start-url="{{ url_for('main.scripts_start') }}"
     data-pause-url="{{ url_for('main.scripts_pause') }}"
     data-stop-url="{{ url_for('main.scripts_stop') }}"

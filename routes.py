@@ -756,7 +756,7 @@ def connection_test_history():
 def connection_test_history_entry(name):
     entry = get_connection_history_entry(name)
     if not entry:
-        return jsonify({"success": False, "message": "History entry not found."})
+        return jsonify({"success": False, "message": "Saved setup not found."})
 
     return jsonify({
         "success": True,

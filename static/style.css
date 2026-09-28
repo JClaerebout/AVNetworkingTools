@@ -897,6 +897,28 @@ input:focus, select:focus {
     color: var(--accent-hover);
 }
 
+.log-toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 12px 0 8px;
+}
+
+.log-toolbar h3 {
+    margin: 0 auto 0 0;
+}
+
+.log-toolbar input[type="search"] {
+    flex: 1 1 160px;
+    min-width: 120px;
+    max-width: 320px;
+}
+
+.log-toolbar .hint {
+    min-width: 68px;
+}
+
 .scan-actions-button {
     border: 1px solid var(--line);
     border-radius: 5px;

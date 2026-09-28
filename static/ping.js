@@ -12,6 +12,10 @@
     const output = document.getElementById("pingOutput");
 
     if (!ipInput) return;
+    const logView = window.AVLogView.createLogView({
+        output,
+        latest: document.getElementById("pingLogLatest")
+    });
 
     const selectedTarget = new URLSearchParams(window.location.search).get("target");
     if (selectedTarget) ipInput.value = selectedTarget;
@@ -35,8 +39,7 @@
     });
 
     function setOutput(lines) {
-        output.textContent = lines && lines.length ? lines.join("\n") : "No output yet.";
-        output.scrollTop = output.scrollHeight;
+        logView.render(lines || [], "No output yet.");
     }
 
     function updateHistory(history) {

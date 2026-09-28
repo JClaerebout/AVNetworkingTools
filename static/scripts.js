@@ -5,6 +5,12 @@
     const statusBox = document.getElementById("scriptStatus");
     const requestStatus = document.getElementById("scriptRequestStatus");
     const output = document.getElementById("scriptOutput");
+    const logView = window.AVLogView.createLogView({
+        output,
+        search: document.getElementById("scriptLogSearch"),
+        count: document.getElementById("scriptLogCount"),
+        latest: document.getElementById("scriptLogLatest")
+    });
     const runButton = document.getElementById("runScript");
     const pauseButton = document.getElementById("pauseScript");
     const stopButton = document.getElementById("stopScript");
@@ -14,8 +20,6 @@
     const saveStatus = document.getElementById("scriptSaveStatus");
     const storageKey = "avNetworkingTools:scriptDraft:v1";
     let draggedBlock = null;
-    let lastOutput = "";
-    let hideLogUntilChange = false;
 
     function updateEmptyState() {
         emptyState.hidden = canvas.children.length > 0;
@@ -251,15 +255,7 @@
         Array.from(canvas.children).forEach((block, index) => {
             block.classList.toggle("is-current", data.running && data.current_block === index);
         });
-        const rendered = (data.output || []).map(item => `[${item.time}] ${item.message}`).join("\n");
-        if (rendered !== lastOutput) {
-            lastOutput = rendered;
-            if (hideLogUntilChange) hideLogUntilChange = false;
-            if (!hideLogUntilChange) {
-                output.textContent = rendered || "No script run yet.";
-                output.scrollTop = output.scrollHeight;
-            }
-        }
+        logView.render((data.output || []).map(item => `[${item.time}] ${item.message}`), "No script run yet.");
     }
 
     const poller = window.AVRequests.createStatusPoller({
@@ -287,10 +283,7 @@
     runButton.addEventListener("click", () => post(urls.startUrl, {blocks: collectBlocks()}));
     pauseButton.addEventListener("click", () => post(urls.pauseUrl, {paused: pauseButton.textContent === "Pause"}));
     stopButton.addEventListener("click", () => post(urls.stopUrl));
-    document.getElementById("clearScriptLog").addEventListener("click", () => {
-        output.textContent = "Log view cleared.";
-        hideLogUntilChange = true;
-    });
+    document.getElementById("clearScriptLog").addEventListener("click", logView.clearView);
     canvas.addEventListener("dragover", event => {
         if (!draggedBlock) return;
         event.preventDefault();

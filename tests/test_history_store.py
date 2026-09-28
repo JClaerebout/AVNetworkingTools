@@ -15,6 +15,29 @@ import script_history
 
 
 class HistoryStorageTests(unittest.TestCase):
+    def test_connection_setups_remove_legacy_and_new_hosts(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "connections.json"
+            path.write_text(json.dumps([{
+                "name": "Projector", "host": "192.168.1.20", "protocol": "tcp",
+                "port": "23", "send_fields": ["POWER ON"]
+            }]), encoding="utf-8")
+            with patch.object(connection_history, "CONNECTION_HISTORY_FILE", path):
+                entries = connection_history.load_connection_history()
+                self.assertNotIn("host", entries[0])
+                self.assertEqual(entries[0]["send_fields"], ["POWER ON"])
+                for saved in (path, Path(str(path) + ".bak")):
+                    self.assertNotIn("host", saved.read_text(encoding="utf-8"))
+
+                result = connection_history.save_connection_history_entry({
+                    "name": "Switch", "host": "10.0.0.5", "protocol": "ssh",
+                    "port": "22", "send_fields": ["status"]
+                })
+                self.assertTrue(result[0])
+                self.assertNotIn("host", connection_history.get_connection_history_entry("Switch"))
+                for saved in (path, Path(str(path) + ".bak")):
+                    self.assertNotIn("host", saved.read_text(encoding="utf-8"))
+
     def test_interrupted_replace_preserves_primary_and_backup(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "history.json"

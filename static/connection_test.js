@@ -14,6 +14,14 @@
     const outputBox = document.getElementById("connOutput");
     const inlineInput = document.getElementById("connInlineInput");
     const autoScroll = document.getElementById("autoScroll");
+    const logView = window.AVLogView.createLogView({
+        output: outputBox,
+        search: document.getElementById("connectionLogSearch"),
+        count: document.getElementById("connectionLogCount"),
+        latest: document.getElementById("connectionLogLatest"),
+        separator: "\n\n",
+        follow: () => autoScroll.checked
+    });
     const exportButton = document.getElementById("exportConnectionTxt");
     const exportStatus = document.getElementById("connectionExportStatus");
     const sendRows = document.getElementById("sendRows");
@@ -54,7 +62,6 @@
         connectButton
     ];
 
-    let lastOutput = "";
     let draggedSendRow = null;
     let recalledHistoryName = "";
     let exportInProgress = false;
@@ -132,26 +139,7 @@
         inlineInput.disabled = !(data.connected ?? data.running);
         exportButton.disabled = exportInProgress || !data.output || data.output.length === 0;
 
-        const newOutput = data.output && data.output.length
-            ? data.output.map(formatOutputLine).join("\n\n")
-            : "No data yet.";
-
-        if (newOutput !== lastOutput) {
-            const wasNearBottom =
-                outputBox.scrollHeight - outputBox.scrollTop - outputBox.clientHeight < 20;
-
-            const oldScrollTop = outputBox.scrollTop;
-
-            outputBox.textContent = newOutput;
-
-            if (autoScroll.checked && wasNearBottom) {
-                outputBox.scrollTop = outputBox.scrollHeight;
-            } else {
-                outputBox.scrollTop = oldScrollTop;
-            }
-
-            lastOutput = newOutput;
-        }
+        logView.render((data.output || []).map(formatOutputLine), "No data yet.");
     }
 
     const poller = window.AVRequests.createStatusPoller({
@@ -325,7 +313,6 @@
             overwrite: overwrite,
 
             protocol: protocolSelect.value,
-            host: hostInput.value,
             port: portInput.value,
 
             username: usernameInput.value,
@@ -399,7 +386,6 @@
     function applyConnectionSettings(entry) {
         protocolSelect.value = entry.protocol || "tcp";
 
-        hostInput.value = entry.host || "";
         portInput.value = entry.port || "";
 
         usernameInput.value = entry.username || "";
@@ -444,7 +430,7 @@
 
         if (!data.success && data.message === "NAME_EXISTS") {
             const overwriteConfirm = confirm(
-                `A history entry named "${name}" already exists.\n\nPress OK to overwrite it.\nPress Cancel to choose another name.`
+                `A saved setup named "${name}" already exists.\n\nPress OK to overwrite it.\nPress Cancel to choose another name.`
             );
 
             if (overwriteConfirm) {
@@ -457,7 +443,7 @@
         }
 
         if (!data.success) {
-            alert(data.message || "Could not save history.");
+            alert(data.message || "Could not save setup.");
             return;
         }
 
@@ -474,7 +460,7 @@
         const data = await response.json();
 
         if (!data.success) {
-            alert(data.message || "Could not load history entry.");
+            alert(data.message || "Could not load setup.");
             return;
         }
 

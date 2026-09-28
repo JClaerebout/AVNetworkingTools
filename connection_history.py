@@ -12,7 +12,15 @@ def _valid(item):
 
 
 def load_connection_history() -> List[Dict]:
-    return load_list(CONNECTION_HISTORY_FILE, _valid)
+    history = load_list(CONNECTION_HISTORY_FILE, _valid)
+    if not any("host" in item for item in history):
+        return history
+
+    def remove_legacy_hosts(entries):
+        cleaned = [{key: value for key, value in item.items() if key != "host"} for item in entries]
+        return cleaned, cleaned
+
+    return update_list(CONNECTION_HISTORY_FILE, _valid, remove_legacy_hosts, backup_new=True)
 
 
 def save_connection_history_entry(entry: Dict, overwrite: bool = False) -> Tuple[bool, str]:
@@ -23,12 +31,14 @@ def save_connection_history_entry(entry: Dict, overwrite: bool = False) -> Tuple
     def update(history):
         if any(item.get("name") == name for item in history) and not overwrite:
             return None, (False, "NAME_EXISTS")
-        record = dict(entry, name=name, timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        history = [item for item in history if item.get("name") != name]
+        record = {key: value for key, value in entry.items() if key != "host"}
+        record.update(name=name, timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        history = [{key: value for key, value in item.items() if key != "host"}
+                   for item in history if item.get("name") != name]
         history.insert(0, record)
         return history[:MAX_CONNECTION_HISTORY], (True, "Saved.")
 
-    return update_list(CONNECTION_HISTORY_FILE, _valid, update)
+    return update_list(CONNECTION_HISTORY_FILE, _valid, update, backup_new=True)
 
 
 def get_connection_history_entry(name: str) -> Dict:

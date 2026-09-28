@@ -70,7 +70,7 @@ def _atomic_write(path, data):
             temporary.unlink(missing_ok=True)
 
 
-def update_list(path, valid, update):
+def update_list(path, valid, update, *, backup_new=False):
     """Run a read-modify-write transaction; update returns (new_list, result)."""
     path = Path(path)
     with history_lock(path):
@@ -78,7 +78,9 @@ def update_list(path, valid, update):
         new, result = update(previous)
         if new is not None:
             # A corrupt primary must not replace a good backup with empty data.
-            if path.exists():
+            if backup_new:
+                _atomic_write(_backup(path), new)
+            elif path.exists():
                 try:
                     old = _valid_list(path, valid)
                 except (OSError, ValueError, UnicodeError):
