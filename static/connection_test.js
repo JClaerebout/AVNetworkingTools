@@ -10,6 +10,7 @@
     const connectButton = document.getElementById("connectButton");
     const disconnectButton = document.getElementById("disconnectButton");
     const statusBox = document.getElementById("connStatus");
+    const requestStatus = document.getElementById("connRequestStatus");
     const outputBox = document.getElementById("connOutput");
     const inlineInput = document.getElementById("connInlineInput");
     const autoScroll = document.getElementById("autoScroll");
@@ -150,15 +151,14 @@
         }
     }
 
-    async function refreshStatus() {
-        const response = await fetch(urls.statusUrl);
-        renderStatus(await response.json());
-    }
+    const poller = window.AVRequests.createStatusPoller({
+        url: urls.statusUrl, interval: 500, onData: renderStatus, indicator: requestStatus
+    });
 
     async function connect() {
         resetExportStatus();
         exportButton.disabled = true;
-        const response = await fetch(urls.startUrl, {
+        const data = await poller.action(urls.startUrl, {
             method: "POST",
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify({
@@ -173,18 +173,13 @@
                 password: passwordInput.value
             })
         });
-        const data = await response.json();
-        renderStatus(data);
-        if (!data.success) {
-            alert(data.message);
-        } else {
+        if (data && data.success) {
             inlineInput.focus();
         }
     }
 
     async function disconnect() {
-        const response = await fetch(urls.stopUrl, {method: "POST"});
-        renderStatus(await response.json());
+        await poller.action(urls.stopUrl, {method: "POST"});
     }
 
     function resetExportStatus() {
@@ -213,13 +208,13 @@
             alert(`Could not export connection session: ${error.message}`);
         } finally {
             exportInProgress = false;
-            refreshStatus();
+            poller.poll();
         }
     }
 
     async function sendValue(input, clearAfterSend = false) {
         const value = input.value;
-        const response = await fetch(urls.sendUrl, {
+        const data = await poller.action(urls.sendUrl, {
             method: "POST",
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify({
@@ -229,12 +224,7 @@
                 add_lf: sendLf.checked
             })
         });
-        const data = await response.json();
-        renderStatus(data);
-        if (!data.success) {
-            alert(data.message);
-            return;
-        }
+        if (!data || !data.success) return;
 
         if (clearAfterSend && input.value === value) input.value = "";
     }
@@ -532,7 +522,7 @@
     sendRows.addEventListener("drop", event => {
         if (draggedSendRow) event.preventDefault();
     });
-    rxAsHex.addEventListener("change", refreshStatus);
+    rxAsHex.addEventListener("change", poller.poll);
     refreshSerialPorts.addEventListener("click", loadSerialPorts);
     const savedSendRows = loadSendRowsState();
     if (savedSendRows) {
@@ -559,6 +549,6 @@
 
     updateProtocolDefaults();
     loadConnectionHistory();
-    refreshStatus();
-    setInterval(refreshStatus, 500);
+    poller.start();
+    window.addEventListener("pagehide", poller.stop);
 })();

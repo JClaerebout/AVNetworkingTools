@@ -1,4 +1,6 @@
 import secrets
+import socket
+import sys
 import threading
 import time
 import urllib.error
@@ -38,8 +40,25 @@ app = create_app()
 DEFAULT_PORT = 49780
 
 
+class PortInUseError(RuntimeError):
+    """The desktop app cannot own its fixed local port."""
+
+
 def start_flask(server):
     server.run()
+
+
+def create_desktop_server(port=DEFAULT_PORT):
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        if sys.platform == "win32":
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        listener.bind(("127.0.0.1", port))
+        listener.listen(socket.SOMAXCONN)
+        return create_server(app, sockets=[listener], threads=8)
+    except BaseException:
+        listener.close()
+        raise
 
 
 def wait_for_flask(instance_id, server_thread, host="127.0.0.1", port=DEFAULT_PORT, timeout=10):
@@ -59,9 +78,9 @@ def wait_for_flask(instance_id, server_thread, host="127.0.0.1", port=DEFAULT_PO
 
 def run_desktop():
     try:
-        server = create_server(app, host="127.0.0.1", port=DEFAULT_PORT, threads=8)
+        server = create_desktop_server()
     except OSError as exc:
-        raise RuntimeError(f"Cannot start AVNetworkingTools on port {DEFAULT_PORT}. Close the application using that port and try again.") from exc
+        raise PortInUseError(f"AVNetworkingTools is already running, or port {DEFAULT_PORT} is in use. Close the other application before starting a new window.") from exc
     flask_thread = threading.Thread(target=start_flask, args=(server,), daemon=True)
     try:
         flask_thread.start()
@@ -82,10 +101,17 @@ def run_desktop():
 if __name__ == "__main__":
     try:
         run_desktop()
+    except PortInUseError as exc:
+        message = str(exc)
+        print(message)
+        if sys.platform == "win32":
+            import ctypes
+            ctypes.windll.user32.MessageBoxW(None, message, "AVNetworkingTools", 0x40)
+        raise SystemExit(0) from None
     except Exception as exc:
         message = str(exc)
         print(message)
-        if __import__("sys").platform == "win32":
+        if sys.platform == "win32":
             import ctypes
             ctypes.windll.user32.MessageBoxW(None, message, "AVNetworkingTools startup failed", 0x10)
         raise SystemExit(1) from exc

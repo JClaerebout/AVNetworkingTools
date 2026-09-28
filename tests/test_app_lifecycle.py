@@ -20,14 +20,22 @@ class StartupTests(unittest.TestCase):
             self.assertFalse(app.wait_for_flask("ours", thread, timeout=1))
 
     def test_busy_port_does_not_open_window(self):
-        with patch.object(app, "create_server", side_effect=OSError("busy")), patch.object(app.webview, "create_window") as window:
-            with self.assertRaisesRegex(RuntimeError, "port"):
+        with patch.object(app, "create_desktop_server", side_effect=OSError("busy")), patch.object(app.webview, "create_window") as window:
+            with self.assertRaisesRegex(RuntimeError, "already running"):
                 app.run_desktop()
             window.assert_not_called()
 
+    def test_exclusive_listener_rejects_second_server(self):
+        first = app.create_desktop_server(port=0)
+        try:
+            with self.assertRaises(OSError):
+                app.create_desktop_server(port=int(first.effective_port))
+        finally:
+            first.close()
+
     def test_window_close_stops_tasks_and_server(self):
         server = Mock()
-        with patch.object(app, "create_server", return_value=server), patch.object(app, "wait_for_flask", return_value=True), patch.object(app, "stop_background_tasks") as stop, patch.object(app, "start_manufacturer_database_update"), patch.object(app.webview, "create_window"), patch.object(app.webview, "start"):
+        with patch.object(app, "create_desktop_server", return_value=server), patch.object(app, "wait_for_flask", return_value=True), patch.object(app, "stop_background_tasks") as stop, patch.object(app, "start_manufacturer_database_update"), patch.object(app.webview, "create_window"), patch.object(app.webview, "start"):
             app.run_desktop()
         stop.assert_called_once()
         server.close.assert_called_once()

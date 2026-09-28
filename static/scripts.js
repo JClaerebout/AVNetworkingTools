@@ -3,6 +3,7 @@
     const canvas = document.getElementById("scriptCanvas");
     const emptyState = document.getElementById("scriptEmpty");
     const statusBox = document.getElementById("scriptStatus");
+    const requestStatus = document.getElementById("scriptRequestStatus");
     const output = document.getElementById("scriptOutput");
     const runButton = document.getElementById("runScript");
     const pauseButton = document.getElementById("pauseScript");
@@ -261,28 +262,16 @@
         }
     }
 
+    const poller = window.AVRequests.createStatusPoller({
+        url: urls.statusUrl, interval: 500, onData: renderStatus, indicator: requestStatus
+    });
+
     async function post(url, body) {
-        try {
-            const response = await fetch(url, {
+        await poller.action(url, {
                 method: "POST",
                 headers: {"Content-Type": "application/json"},
                 body: JSON.stringify(body || {})
-            });
-            const data = await response.json();
-            renderStatus(data);
-            if (!response.ok || !data.success) alert(data.message || "The action could not be completed.");
-        } catch (error) {
-            alert(`Request failed: ${error.message}`);
-        }
-    }
-
-    async function refreshStatus() {
-        try {
-            const response = await fetch(urls.statusUrl);
-            renderStatus(await response.json());
-        } catch (_error) {
-            statusBox.textContent = "Status unavailable";
-        }
+        });
     }
 
     document.getElementById("addTargetBlock").addEventListener("click", () => addBlock("target"));
@@ -315,6 +304,6 @@
 
     loadDraft();
     refreshSavedScripts();
-    refreshStatus();
-    setInterval(refreshStatus, 500);
+    poller.start();
+    window.addEventListener("pagehide", poller.stop);
 })();

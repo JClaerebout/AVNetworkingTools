@@ -8,6 +8,7 @@
     const downloadButton = document.getElementById("downloadPingTxt");
     const exportStatus = document.getElementById("pingExportStatus");
     const stateLabel = document.getElementById("pingState");
+    const requestStatus = document.getElementById("pingRequestStatus");
     const output = document.getElementById("pingOutput");
 
     if (!ipInput) return;
@@ -56,25 +57,20 @@
         updateHistory(data.history);
     }
 
-    async function refreshStatus() {
-        const response = await fetch(urls.statusUrl);
-        renderStatus(await response.json());
-    }
+    const poller = window.AVRequests.createStatusPoller({
+        url: urls.statusUrl, interval: 1000, onData: renderStatus, indicator: requestStatus
+    });
 
     async function startPing() {
-        const response = await fetch(urls.startUrl, {
+        await poller.action(urls.startUrl, {
             method: "POST",
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify({ip: ipInput.value})
         });
-        const data = await response.json();
-        renderStatus(data);
-        if (!data.success) alert(data.message);
     }
 
     async function stopPing() {
-        const response = await fetch(urls.stopUrl, {method: "POST"});
-        renderStatus(await response.json());
+        await poller.action(urls.stopUrl, {method: "POST"});
     }
 
     async function savePingTxt() {
@@ -99,6 +95,6 @@
     stopButton.addEventListener("click", stopPing);
     downloadButton.addEventListener("click", savePingTxt);
 
-    refreshStatus();
-    setInterval(refreshStatus, 1000);
+    poller.start();
+    window.addEventListener("pagehide", poller.stop);
 })();

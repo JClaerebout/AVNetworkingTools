@@ -2,6 +2,7 @@
     const urls = document.currentScript.dataset;
 
     const wifiStatus = document.getElementById("wifiStatus");
+    const requestStatus = document.getElementById("wifiRequestStatus");
     const startWifiScanButton = document.getElementById("startWifiScan");
     const stopWifiScanButton = document.getElementById("stopWifiScan");
     const wifiList = document.getElementById("wifiList");
@@ -128,35 +129,25 @@
         renderList(groups);
     }
 
-    async function refreshWifiStatus() {
-        const response = await fetch(urls.statusUrl);
-        renderWifiStatus(await response.json());
-    }
+    const poller = window.AVRequests.createStatusPoller({
+        url: urls.statusUrl, interval: 1000, onData: renderWifiStatus, indicator: requestStatus
+    });
 
     async function startWifiScan() {
-        const response = await fetch(urls.startUrl, {
+        await poller.action(urls.startUrl, {
             method: "POST"
         });
-
-        const data = await response.json();
-        renderWifiStatus(data);
-
-        if (!data.success) {
-            alert(data.message);
-        }
     }
 
     async function stopWifiScan() {
-        const response = await fetch(urls.stopUrl, {
+        await poller.action(urls.stopUrl, {
             method: "POST"
         });
-
-        renderWifiStatus(await response.json());
     }
 
     startWifiScanButton.addEventListener("click", startWifiScan);
     stopWifiScanButton.addEventListener("click", stopWifiScan);
 
-    refreshWifiStatus();
-    setInterval(refreshWifiStatus, 1000);
+    poller.start();
+    window.addEventListener("pagehide", poller.stop);
 })();

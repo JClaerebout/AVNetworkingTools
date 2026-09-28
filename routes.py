@@ -29,6 +29,15 @@ from script_history import delete_script, get_script, list_scripts, save_script
 main_bp = Blueprint("main", __name__)
 
 
+def _json_object():
+    data = request.get_json(silent=True)
+    return data if isinstance(data, dict) else None
+
+
+def _bad_json():
+    return jsonify(success=False, message="Expected a JSON object."), 400
+
+
 @main_bp.route("/api/update/check")
 def update_check():
     try:
@@ -152,8 +161,12 @@ def ping_page():
 
 @main_bp.route("/ping/start", methods=["POST"])
 def ping_start():
-    data = request.get_json(silent=True) or {}
+    data = _json_object()
+    if data is None:
+        return _bad_json()
     ip = data.get("ip", "")
+    if not isinstance(ip, str):
+        return jsonify(success=False, message="IP address or hostname must be text."), 400
     success, message = start_ping(ip)
     return jsonify({**get_ping_status(), "success": success, "message": message})
 
@@ -225,7 +238,11 @@ def connection_test_page():
 
 @main_bp.route("/connection-test/start", methods=["POST"])
 def connection_test_start():
-    data = request.get_json(silent=True) or {}
+    data = _json_object()
+    if data is None:
+        return _bad_json()
+    if any(not isinstance(data.get(field, ""), str) for field in ("protocol", "host", "port", "username", "password", "baudrate", "databits", "parity", "stopbits")):
+        return jsonify(success=False, message="Connection fields must be text."), 400
     success, message = start_connection(
         data.get("protocol", ""),
         data.get("host", ""),
@@ -245,7 +262,11 @@ def connection_test_serial_ports():
 
 @main_bp.route("/connection-test/send", methods=["POST"])
 def connection_test_send():
-    data = request.get_json(silent=True) or {}
+    data = _json_object()
+    if data is None:
+        return _bad_json()
+    if not isinstance(data.get("data", ""), str):
+        return jsonify(success=False, message="Send data must be text."), 400
     success, message = send_data(
         data.get("data", ""),
         bool(data.get("is_hex", False)),
@@ -273,14 +294,20 @@ def scripts_page():
 
 @main_bp.route("/scripts/start", methods=["POST"])
 def scripts_start():
-    data = request.get_json(silent=True) or {}
+    data = _json_object()
+    if data is None:
+        return _bad_json()
     success, message = start_script(data.get("blocks"))
     return jsonify({**get_script_status(), "success": success, "message": message}), 200 if success else 409
 
 
 @main_bp.route("/scripts/pause", methods=["POST"])
 def scripts_pause():
-    data = request.get_json(silent=True) or {}
+    data = _json_object()
+    if data is None:
+        return _bad_json()
+    if not isinstance(data.get("paused"), bool):
+        return jsonify(success=False, message="Paused must be true or false."), 400
     success, message = set_script_paused(bool(data.get("paused")))
     return jsonify({**get_script_status(), "success": success, "message": message}), 200 if success else 409
 

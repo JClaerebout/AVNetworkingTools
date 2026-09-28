@@ -25,7 +25,8 @@ if errorlevel 1 (
 
 echo.
 echo Building AVNetworkingTools V%APP_RELEASE_VERSION%...
-python -m PyInstaller "AVNetworkingTools.spec" --noconfirm
+set "APP_STAGE_DIR=dist\pending"
+python -m PyInstaller "AVNetworkingTools.spec" --noconfirm --distpath "%APP_STAGE_DIR%"
 if errorlevel 1 (
     echo.
     echo Build failed.
@@ -33,4 +34,12 @@ if errorlevel 1 (
 )
 
 echo.
+powershell -NoProfile -Command "Copy-Item -LiteralPath '%APP_STAGE_DIR%\AVNetworkingTools.exe' -Destination 'dist\AVNetworkingTools.exe' -Force -ErrorAction Stop" >nul 2>&1
+if errorlevel 1 (
+    echo Build complete: %APP_STAGE_DIR%\AVNetworkingTools.exe ^(V%APP_RELEASE_VERSION%^)
+    echo Could not replace dist\AVNetworkingTools.exe ^(it may still be open^).
+    echo Close the running app, then copy the staged EXE over it or run build.bat again.
+    exit /b 0
+)
+
 echo Build complete: dist\AVNetworkingTools.exe ^(V%APP_RELEASE_VERSION%^)
