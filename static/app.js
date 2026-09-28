@@ -190,6 +190,8 @@
 
     function restoreField(field) {
         if (field.closest(".priority-form")) return;
+        // Adapter forms must reflect the live Windows configuration after navigation.
+        if (field.closest(".config-form")) return;
         const state = savedFields[fieldKey(field)];
         if (!state) return;
 
@@ -207,6 +209,7 @@
     function saveAllFields() {
         const state = {};
         document.querySelectorAll(fieldSelector).forEach(field => {
+            if (field.closest('.config-form')) return;
             state[fieldKey(field)] = fieldState(field);
         });
 
@@ -254,6 +257,35 @@ function updateModeChangeState(form) {
     } else {
         form.dataset.modeChangePending = 'true';
     }
+    const pendingLabel = form.querySelector('.mode-pending');
+    if (pendingLabel) pendingLabel.hidden = form.dataset.modeChangePending !== 'true';
+}
+
+function syncNicForm(card, nic) {
+    const form = card.querySelector('.config-form');
+    if (!form) return;
+    const modeSelect = form.querySelector('.mode-select');
+    const currentMode = nic.dhcp_raw === 'Enabled' ? 'dhcp' : 'static';
+    const forceSync = form.dataset.syncAfterRestore === 'true';
+    delete form.dataset.syncAfterRestore;
+    if (forceSync) {
+        delete form.dataset.modeChangePending;
+        delete form.dataset.editPending;
+        modeSelect.value = currentMode;
+    }
+    form.dataset.appliedMode = currentMode;
+    updateModeChangeState(form);
+    if (form.dataset.modeChangePending === 'true' || form.dataset.editPending === 'true') return;
+
+    modeSelect.value = currentMode;
+    for (const [name, value] of Object.entries({
+        ip: nic.ip || '', subnet: nic.subnet || '', gateway: nic.gateway || '',
+        dns: (nic.dns || []).join(', ')
+    })) {
+        const field = form.querySelector(`[name="${name}"]`);
+        if (field) field.value = value;
+    }
+    updateStaticVisibility(form);
 }
 
 document.querySelectorAll('.config-form').forEach(form => {
@@ -269,6 +301,9 @@ document.querySelectorAll('.config-form').forEach(form => {
         updateStaticVisibility(form);
         updateModeChangeState(form);
     });
+    form.querySelectorAll('.static-fields input').forEach(field => {
+        field.addEventListener('input', () => { form.dataset.editPending = 'true'; });
+    });
 
     if (historySelect) {
         historySelect.addEventListener('change', event => {
@@ -280,6 +315,7 @@ document.querySelectorAll('.config-form').forEach(form => {
             form.querySelector('[name="subnet"]').value = h.subnet || '';
             form.querySelector('[name="gateway"]').value = h.gateway || '';
             form.querySelector('[name="dns"]').value = [h.dns1, h.dns2].filter(Boolean).join(', ');
+            form.dataset.editPending = 'true';
             updateStaticVisibility(form);
             updateModeChangeState(form);
         });
@@ -365,6 +401,18 @@ document.querySelectorAll('.config-form, .priority-form, form[id^="release-"], f
             if (form.classList.contains('config-form') && operationSucceeded) {
                 form.dataset.appliedMode = form.querySelector('.mode-select').value;
                 delete form.dataset.modeChangePending;
+                delete form.dataset.editPending;
+                updateModeChangeState(form);
+            }
+            if (form.id.startsWith('restore-') && operationSucceeded) {
+                const configForm = busyCard?.querySelector('.config-form');
+                if (configForm) {
+                    delete configForm.dataset.modeChangePending;
+                    delete configForm.dataset.editPending;
+                    configForm.dataset.syncAfterRestore = 'true';
+                    const pendingLabel = configForm.querySelector('.mode-pending');
+                    if (pendingLabel) pendingLabel.hidden = true;
+                }
             }
             hideNicBusyOverlay(busyCard);
             if (operationSucceeded) startNicRefreshBurst();
@@ -420,6 +468,7 @@ async function refreshNicStatus() {
                 priority.value = value;
             }
             card.querySelectorAll('.dhcp-action').forEach(button => { button.hidden = nic.dhcp_raw !== 'Enabled'; });
+            syncNicForm(card, nic);
         }
     } catch (error) {
         // Keep the operation result visible even if a later status refresh fails.

@@ -1,8 +1,8 @@
 import re
-import subprocess
 import threading
 import time
 from collections import defaultdict
+from system_utils import run_cmd
 
 _wifi_lock = threading.Lock()
 _wifi_thread = None
@@ -13,15 +13,12 @@ _wifi_results = []
 
 
 def _run_netsh():
-    result = subprocess.run(
-        ["netsh", "wlan", "show", "networks", "mode=bssid"],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        creationflags=subprocess.CREATE_NO_WINDOW,
-    )
-    return result.stdout
+    code, stdout, stderr = run_cmd(["netsh", "wlan", "show", "networks", "mode=bssid"], timeout=8)
+    if code != 0:
+        raise RuntimeError(stderr or stdout or f"netsh failed with exit code {code}.")
+    if not stdout.strip():
+        raise RuntimeError("netsh returned no Wi-Fi scan data.")
+    return stdout
 
 
 def _channel_to_band(channel):
@@ -251,12 +248,12 @@ def _parse_netsh(output):
             current_bssid = None
             continue
 
-        auth_match = re.match(r"^Authentication\s*:\s*(.*)$", line)
+        auth_match = re.match(r"^(?:Authentication|Authenticatie|Authentification)\s*:\s*(.*)$", line, re.IGNORECASE)
         if auth_match:
             current_auth = auth_match.group(1).strip()
             continue
 
-        encryption_match = re.match(r"^Encryption\s*:\s*(.*)$", line)
+        encryption_match = re.match(r"^(?:Encryption|Versleuteling|Chiffrement)\s*:\s*(.*)$", line, re.IGNORECASE)
         if encryption_match:
             current_encryption = encryption_match.group(1).strip()
             continue
@@ -281,30 +278,30 @@ def _parse_netsh(output):
             results.append(current_bssid)
             continue
 
-        signal_match = re.match(r"^Signal\s*:\s*(.*)$", line)
+        signal_match = re.match(r"^(?:Signal|Signaal)\s*:\s*(.*)$", line, re.IGNORECASE)
         if current_bssid and signal_match:
             percent = _parse_signal_percent(signal_match.group(1))
             current_bssid["signal_percent"] = percent
             current_bssid["signal_dbm"] = _signal_to_dbm(percent)
             continue
 
-        radio_match = re.match(r"^Radio type\s*:\s*(.*)$", line)
+        radio_match = re.match(r"^(?:Radio type|Radiotype|Type de radio)\s*:\s*(.*)$", line, re.IGNORECASE)
         if current_bssid and radio_match:
             current_bssid["radio_type"] = radio_match.group(1).strip()
             continue
 
-        band_match = re.match(r"^Band\s*:\s*(.*)$", line)
+        band_match = re.match(r"^(?:Band|Bande)\s*:\s*(.*)$", line, re.IGNORECASE)
         if current_bssid and band_match:
             band = band_match.group(1).strip().replace(" ", "")
             current_bssid["band"] = "2.4GHz" if band.startswith("2.4") else band
             continue
 
-        width_match = re.match(r"^Channel width\s*:\s*(.*)$", line)
+        width_match = re.match(r"^(?:Channel width|Kanaalbreedte|Largeur du canal)\s*:\s*(.*)$", line, re.IGNORECASE)
         if current_bssid and width_match:
             current_bssid["channel_width"] = width_match.group(1).strip()
             continue
 
-        channel_match = re.match(r"^Channel\s*:\s*(.*)$", line)
+        channel_match = re.match(r"^(?:Channel|Kanaal|Canal)\s*:\s*(.*)$", line, re.IGNORECASE)
         if current_bssid and channel_match:
             channel = _parse_channel(channel_match.group(1))
             current_bssid["channel"] = channel
@@ -312,7 +309,7 @@ def _parse_netsh(output):
                 current_bssid["band"] = _channel_to_band(channel)
             continue
 
-        stations_match = re.match(r"^Connected Stations\s*:\s*(\d+).*$", line, re.IGNORECASE)
+        stations_match = re.match(r"^(?:Connected Stations|Verbonden stations|Stations connectées)\s*:\s*(\d+).*$", line, re.IGNORECASE)
         if current_bssid and stations_match:
             current_bssid["connected_stations"] = int(stations_match.group(1))
             continue
@@ -715,6 +712,8 @@ def _scan_loop():
         try:
             raw = _run_netsh()
             parsed = _parse_netsh(raw)
+            if "BSSID" in raw.upper() and not parsed:
+                raise ValueError("Could not read Wi-Fi records from Windows output; check the Windows display language.")
             grouped = _group_results(parsed)
 
             with _wifi_lock:
@@ -731,7 +730,8 @@ def _scan_loop():
 
     with _wifi_lock:
         _wifi_running = False
-        _wifi_message = "Scan stopped."
+        if not _wifi_message.startswith("WiFi scan error:"):
+            _wifi_message = "Scan stopped."
 
 
 def start_wifi_scan():

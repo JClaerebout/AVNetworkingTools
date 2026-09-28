@@ -1,4 +1,5 @@
 import ctypes
+import locale
 import subprocess
 import sys
 from typing import List, Optional
@@ -9,6 +10,10 @@ def is_admin() -> bool:
         return bool(ctypes.windll.shell32.IsUserAnAdmin())
     except Exception:
         return False
+
+DEFAULT_COMMAND_TIMEOUT = 10
+POWERSHELL_TIMEOUT = 8
+
 
 def run_cmd(command: List[str], timeout: Optional[float] = None) -> tuple[int, str, str]:
     """Run a command hidden in the background and return code, stdout, stderr."""
@@ -22,25 +27,26 @@ def run_cmd(command: List[str], timeout: Optional[float] = None) -> tuple[int, s
             startupinfo.wShowWindow = 0
             creationflags = subprocess.CREATE_NO_WINDOW
 
+        deadline = DEFAULT_COMMAND_TIMEOUT if timeout is None else timeout
         result = subprocess.run(
             command,
             capture_output=True,
             text=True,
-            encoding="utf-8",
+            encoding="oem" if sys.platform == "win32" else (locale.getpreferredencoding(False) or "utf-8"),
             errors="replace",
             shell=False,
             startupinfo=startupinfo,
             creationflags=creationflags,
-            timeout=timeout,
+            timeout=deadline,
         )
         return result.returncode, result.stdout.strip(), result.stderr.strip()
     except subprocess.TimeoutExpired:
-        return 124, "", f"Command timed out after {timeout} seconds."
+        return 124, "", f"Command timed out after {deadline:g} seconds."
     except Exception as exc:
         return 1, "", str(exc)
 
 
-def run_powershell(script: str) -> tuple[int, str, str]:
+def run_powershell(script: str, timeout: float = POWERSHELL_TIMEOUT) -> tuple[int, str, str]:
     powershell_path = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
 
     return run_cmd([
@@ -52,4 +58,4 @@ def run_powershell(script: str) -> tuple[int, str, str]:
         "Bypass",
         "-Command",
         script,
-    ])
+    ], timeout=timeout)

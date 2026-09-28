@@ -90,6 +90,7 @@
                         <option value="static" {% if nic.status == 'static' %}selected{% endif %}>Static</option>
                         <option value="dhcp" {% if nic.status in ['dhcp', 'dhcp_no_lease'] %}selected{% endif %}>DHCP</option>
                     </select>
+                    <small class="mode-pending" hidden>Not applied</small>
                 </div>
 
                 <div class="row static-fields">

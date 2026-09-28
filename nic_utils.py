@@ -13,6 +13,8 @@ from system_utils import run_cmd, run_powershell
 
 _previous_configs = {}
 _config_lock = threading.RLock()
+_metrics_cache_lock = threading.Lock()
+_metrics_cache = {"until": 0.0, "value": {}}
 
 
 def _remember_config(interface_name):
@@ -126,7 +128,7 @@ def sort_nics(nics: List[Dict]) -> List[Dict]:
 
 def get_nics() -> List[Dict]:
     wmi = get_wmi()
-    metrics = get_interface_metrics()
+    metrics = get_interface_metrics(cached=True)
 
     adapters = wmi.ExecQuery(
         "SELECT * FROM Win32_NetworkAdapter WHERE NetConnectionID IS NOT NULL"
@@ -215,7 +217,11 @@ def get_nics() -> List[Dict]:
     return sort_nics(nics)
 
 
-def get_interface_metrics():
+def get_interface_metrics(cached=False):
+    if cached:
+        with _metrics_cache_lock:
+            if time.monotonic() < _metrics_cache["until"]:
+                return dict(_metrics_cache["value"])
     code, stdout, _ = run_powershell(
         "Get-NetIPInterface -AddressFamily IPv4 -ErrorAction Stop | "
         "Select-Object InterfaceIndex,InterfaceMetric,AutomaticMetric | ConvertTo-Json -Compress"
@@ -226,10 +232,14 @@ def get_interface_metrics():
         rows = json.loads(stdout)
         if isinstance(rows, dict):
             rows = [rows]
-        return {int(row["InterfaceIndex"]): {
+        metrics = {int(row["InterfaceIndex"]): {
             "metric": int(row["InterfaceMetric"]),
             "automatic_metric": str(row["AutomaticMetric"]).lower() in {"1", "enabled", "true"},
         } for row in (rows or [])}
+        if cached:
+            with _metrics_cache_lock:
+                _metrics_cache.update(until=time.monotonic() + 5, value=metrics)
+        return metrics
     except (ValueError, KeyError, TypeError):
         return {}
 
@@ -248,7 +258,11 @@ def set_interface_metric(interface_index, metric):
     code, stdout, stderr = run_powershell(
         f"Set-NetIPInterface -InterfaceIndex {index} -AddressFamily IPv4 {setting} -ErrorAction Stop"
     )
-    return (False, stderr or stdout or "Could not set interface priority.") if code else (True, "IPv4 interface priority updated.")
+    if code:
+        return False, stderr or stdout or "Could not set interface priority."
+    with _metrics_cache_lock:
+        _metrics_cache["until"] = 0.0
+    return True, "IPv4 interface priority updated."
 
 
 def set_dhcp(interface_name: str) -> tuple[bool, str]:
@@ -263,8 +277,8 @@ def set_dhcp(interface_name: str) -> tuple[bool, str]:
 
     output = []
     for cmd in commands:
-        code, stdout, stderr = run_cmd(cmd)
-        output.append(stdout or stderr)
+        code, stdout, stderr = run_cmd(cmd, timeout=30)
+        output.append(stderr or stdout)
         if code != 0:
             return False, "\n".join(output)
 
@@ -329,7 +343,7 @@ def set_static(interface_name: str, ip: str, subnet: str, gateway: str, dns_serv
     else:
         cmd.append("gateway=none")
 
-    code, stdout, stderr = run_cmd(cmd)
+    code, stdout, stderr = run_cmd(cmd, timeout=30)
     if code != 0:
         return False, stderr or stdout or "Failed to set static IP."
 
@@ -340,7 +354,7 @@ def set_static(interface_name: str, ip: str, subnet: str, gateway: str, dns_serv
             "source=static",
             f"address={dns_servers[0]}",
             "primary",
-        ])
+        ], timeout=30)
         if code != 0:
             return False, "Static IP was set, but DNS failed: " + (stderr or stdout)
 
@@ -350,7 +364,7 @@ def set_static(interface_name: str, ip: str, subnet: str, gateway: str, dns_serv
                 f"name={interface_name}",
                 f"address={dns}",
                 f"index={index}",
-            ])
+            ], timeout=30)
             if code != 0:
                 return False, "Static IP was set, but extra DNS failed: " + (stderr or stdout)
     else:
@@ -358,7 +372,7 @@ def set_static(interface_name: str, ip: str, subnet: str, gateway: str, dns_serv
             "netsh", "interface", "ip", "set", "dns",
             f"name={interface_name}",
             "source=dhcp",
-        ])
+        ], timeout=30)
         if code != 0:
             return False, "Static IP was set, but DNS reset failed: " + (stderr or stdout)
 
@@ -392,7 +406,7 @@ def release_dhcp(interface_name: str) -> tuple[bool, str]:
     if not is_interface_connected(interface_name):
         return False, f"Cannot release DHCP on '{interface_name}' because the NIC is disconnected."
 
-    code, stdout, stderr = run_cmd(["ipconfig", "/release", interface_name])
+    code, stdout, stderr = run_cmd(["ipconfig", "/release", interface_name], timeout=45)
     if code != 0:
         return False, stderr or stdout or f"Failed to release DHCP lease on '{interface_name}'."
     return True, f"DHCP lease released on '{interface_name}'."
@@ -402,7 +416,7 @@ def renew_dhcp(interface_name: str) -> tuple[bool, str]:
     if not is_interface_connected(interface_name):
         return False, f"Cannot renew DHCP on '{interface_name}' because the NIC is disconnected."
 
-    code, stdout, stderr = run_cmd(["ipconfig", "/renew", interface_name])
+    code, stdout, stderr = run_cmd(["ipconfig", "/renew", interface_name], timeout=45)
     if code != 0:
         return False, stderr or stdout or f"Failed to renew DHCP lease on '{interface_name}'."
     return True, f"DHCP lease renewed on '{interface_name}'."
