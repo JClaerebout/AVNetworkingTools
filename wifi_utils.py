@@ -775,3 +775,8 @@ def get_wifi_status():
             "conflicts": _analyze_conflicts(flattened),
             "channel_recommendation": _recommend_channels(flattened),
         }
+
+
+def get_wifi_activity() -> bool:
+    with _wifi_lock:
+        return _wifi_running

@@ -25,8 +25,15 @@ from update_utils import check_for_update, get_update_state, install_downloaded_
 from multicast_utils import get_multicast_status, start_multicast_test, stop_multicast_test, touch_multicast_capture
 from script_utils import get_script_status, set_script_paused, start_script, stop_script
 from script_history import delete_script, get_script, list_scripts, save_script
+from activity_utils import get_active_tasks
 
 main_bp = Blueprint("main", __name__)
+
+
+@main_bp.route("/api/activity")
+def active_tasks():
+    return jsonify({"tasks": [{"key": task["key"], "label": task["label"],
+                               "url": url_for(task["endpoint"])} for task in get_active_tasks()]})
 
 
 def _json_object():

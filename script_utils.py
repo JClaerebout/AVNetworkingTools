@@ -420,3 +420,8 @@ def get_script_status():
             "output": list(_state["output"]),
             "outcomes": dict(_state.get("outcomes", {})),
         }
+
+
+def get_script_activity() -> tuple[bool, bool]:
+    with _lock:
+        return bool(_state["running"]), bool(_state["paused"])

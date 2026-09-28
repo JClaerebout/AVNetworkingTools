@@ -1289,3 +1289,9 @@ def get_scan_status() -> Dict:
             "lookup_done": _lookup_done,
             "results": list(_scan_results),
         }
+
+
+def get_scan_activity() -> dict:
+    with _scan_lock:
+        return {"scan": _scan_running, "lookup": _lookup_running,
+                "monitor": _monitor_running, "monitor_paused": _monitor_paused}

@@ -266,6 +266,11 @@ def get_connection_status():
                 "output": list(_conn_output)}
 
 
+def get_connection_activity() -> str:
+    with _conn_lock:
+        return _session.state if _session else "Disconnected"
+
+
 def get_serial_ports() -> list[dict]:
     if list_ports is None:
         return []

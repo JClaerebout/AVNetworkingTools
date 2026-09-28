@@ -13,6 +13,7 @@ Download `AVNetworkingTools.exe` from the [latest release](https://github.com/JC
 - Run ping, Wi-Fi inspection, command-line diagnostics, and TCP/UDP/SSH/serial connection tests.
 - Build and save multi-device command scripts.
 - Use **AV Network Health Check** to inspect visible multicast, IGMP, PTP, and possible RTP traffic, then export a report.
+- See active tools in the header and return to them from any page.
 
 ## Common workflows
 

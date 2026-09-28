@@ -172,3 +172,8 @@ def get_ping_status() -> Dict:
             "output": list(_ping_output),
             "history": load_ping_history(),
         }
+
+
+def get_ping_activity() -> bool:
+    with _ping_lock:
+        return _ping_process is not None and _ping_process.poll() is None

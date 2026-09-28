@@ -76,6 +76,10 @@
             </div>
         </nav>
     </div>
+    <div id="activeTasks" class="active-tasks" role="status" aria-live="polite" hidden>
+        <span id="activeTasksLabel" class="active-tasks-label">Running:</span>
+        <div id="activeTaskLinks" class="active-task-links"></div>
+    </div>
 </header>
 
 <main class="content-scroll">
@@ -107,6 +111,7 @@
 ></script>
 <script src="{{ url_for('static', filename='updater.js') }}?v=1"></script>
 <script src="{{ url_for('static', filename='status_requests.js') }}?v=1"></script>
+<script src="{{ url_for('static', filename='activity.js') }}?v=1" data-activity-url="{{ url_for('main.active_tasks') }}"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -130,6 +130,30 @@ header {
     flex-wrap: nowrap;
 }
 
+.active-tasks {
+    max-width: 100%;
+    padding: 7px 24px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-size: 12px;
+}
+
+.active-tasks[hidden] { display: none; }
+.active-tasks-label { color: var(--muted); }
+.active-task-links { display: flex; flex-wrap: wrap; gap: 6px; }
+.active-task-link {
+    padding: 4px 8px;
+    border: 1px solid var(--accent);
+    border-radius: 999px;
+    color: var(--accent-status);
+    text-decoration: none;
+    white-space: nowrap;
+}
+.active-task-link:hover, .active-task-link:focus-visible { background: var(--accent-soft); }
+.active-tasks.is-stale .active-task-link { border-color: var(--line); color: var(--muted); }
+
 .header-copy {
     min-width: 0;
 }

@@ -442,4 +442,9 @@ def stop_multicast_test() -> tuple[bool, str]:
         return _stop_multicast_test()
 
 
+def get_multicast_activity() -> bool:
+    with _lock:
+        return bool(_state["running"])
+
+
 atexit.register(stop_multicast_test)
