@@ -5,7 +5,7 @@ import webbrowser
 from datetime import datetime
 from pathlib import Path
 
-from flask import Blueprint, Response, flash, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, Response, current_app, flash, jsonify, redirect, render_template, request, url_for
 
 from history import load_history
 from ping_utils import get_ping_status, load_ping_history, start_ping, stop_ping
@@ -26,6 +26,7 @@ from multicast_utils import get_multicast_status, start_multicast_test, stop_mul
 from script_utils import get_script_status, set_script_paused, start_script, stop_script
 from script_history import delete_script, get_script, list_scripts, save_script
 from activity_utils import get_active_tasks
+from learned_connection_presets import get_learned_preset, learn_preset
 
 main_bp = Blueprint("main", __name__)
 
@@ -240,7 +241,7 @@ def command_line_run():
 
 @main_bp.route("/connection-test")
 def connection_test_page():
-    return render_template("connection_test.html")
+    return render_template("connection_test.html", learned_preset=get_learned_preset(request.args.get("manufacturer", "")))
 
 
 @main_bp.route("/connection-test/start", methods=["POST"])
@@ -261,7 +262,22 @@ def connection_test_start():
         data.get("parity", "N"),
         data.get("stopbits", "1"),
     )
-    return jsonify({**get_connection_status(), "success": success, "message": message})
+    status = get_connection_status()
+    preset_learned = False
+    preset_warning = ""
+    protocol, host, port = data.get("protocol", "").lower(), data.get("host", ""), data.get("port", "")
+    if (success and status.get("connected") and protocol in {"tcp", "telnet", "ssh"}
+            and status.get("target") == f"{host}:{port}"):
+        scan_item = next((item for item in get_scan_status().get("results", [])
+                          if item.get("ip") == host and not item.get("missing") and not item.get("is_local")), None)
+        if scan_item:
+            try:
+                preset_learned = learn_preset(scan_item.get("manufacturer"), protocol, port)
+            except OSError as exc:
+                current_app.logger.warning("Could not save learned connection preset: %s", exc)
+                preset_warning = "Connected, but could not remember this manufacturer setting."
+    return jsonify({**status, "success": success, "message": message,
+                    "preset_learned": preset_learned, "preset_warning": preset_warning})
 
 @main_bp.route("/connection-test/serial-ports")
 def connection_test_serial_ports():

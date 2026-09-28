@@ -342,11 +342,17 @@
         if (restoreFocus) trigger?.focus();
     }
 
-    function openTool(baseUrl) {
+    function openTool(baseUrl, includeManufacturer = false) {
         const ip = selectedContextItem?.ip;
         if (!ip) return;
         const url = new URL(baseUrl, window.location.href);
         url.searchParams.set("target", ip);
+        if (includeManufacturer && isCopyableDetail(selectedContextItem?.manufacturer)) {
+            url.searchParams.set("manufacturer", selectedContextItem.manufacturer);
+        }
+        if (includeManufacturer && isCopyableDetail(selectedContextItem?.hostname)) {
+            url.searchParams.set("hostname", selectedContextItem.hostname);
+        }
         window.location.assign(url.href);
     }
 
@@ -450,7 +456,7 @@
         copyText(selectedContextItem?.ip || "");
     });
     pingDeviceButton.addEventListener("click", () => openTool(urls.pingUrl));
-    connectDeviceButton.addEventListener("click", () => openTool(urls.connectUrl));
+    connectDeviceButton.addEventListener("click", () => openTool(urls.connectUrl, true));
     addToScriptButton.addEventListener("click", () => openTool(urls.scriptsUrl));
 
     openWebpageButton.addEventListener("click", event => {

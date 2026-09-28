@@ -897,6 +897,12 @@ input:focus, select:focus {
     color: var(--accent-hover);
 }
 
+.connection-preset-hint:not([hidden]) {
+    padding: 9px 11px;
+    border-left: 3px solid var(--accent);
+    background: var(--inset-bg);
+}
+
 .log-toolbar {
     display: flex;
     align-items: center;

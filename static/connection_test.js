@@ -39,11 +39,64 @@
     const serialStopbits = document.getElementById("serialStopbits");
     const connectionHistory = document.getElementById("connectionHistory");
     const saveConnectionHistory = document.getElementById("saveConnectionHistory");
+    const presetHint = document.getElementById("connPresetHint");
+    const suggestionSelect = document.getElementById("connSuggestion");
 
     if (!protocolSelect) return;
 
-    const selectedTarget = new URLSearchParams(window.location.search).get("target");
+    const params = new URLSearchParams(window.location.search);
+    const selectedTarget = params.get("target");
+    const selectedManufacturer = params.get("manufacturer");
+    const selectedHostname = params.get("hostname");
     if (selectedTarget) hostInput.value = selectedTarget;
+    const matched = selectedTarget ? window.AVConnectionPresets.suggestions(selectedManufacturer, selectedHostname) : [];
+    const learned = selectedTarget && urls.learnedProtocol && urls.learnedPort ? {
+        id: "learned", label: `Learned for ${selectedManufacturer}`,
+        protocol: urls.learnedProtocol, port: urls.learnedPort,
+        note: "Saved after an earlier successful connection. Other models from this manufacturer may differ."
+    } : null;
+    const profiles = new Map();
+    function addSuggestionGroup(label, items) {
+        if (!items.length) return;
+        const group = document.createElement("optgroup");
+        group.label = label;
+        items.forEach(profile => {
+            profiles.set(profile.id, profile);
+            const option = document.createElement("option");
+            option.value = profile.id;
+            option.textContent = `${profile.label} · ${profile.protocol.toUpperCase()} ${profile.port}`;
+            group.appendChild(option);
+        });
+        suggestionSelect.appendChild(group);
+    }
+    addSuggestionGroup("Suggested for scanned device", [learned, ...matched].filter(Boolean));
+    const matchedIds = new Set(matched.map(profile => profile.id));
+    addSuggestionGroup("Other device profiles", window.AVConnectionPresets.all().filter(profile => !matchedIds.has(profile.id)));
+
+    function applySuggestion(profile) {
+        protocolSelect.value = profile.protocol;
+        portInput.value = profile.port;
+        updateProtocolDefaults();
+        presetHint.textContent = `${profile.label}: ${profile.protocol.toUpperCase()} port ${profile.port}. ${profile.note}`
+            + (profile.protocol === "udp" ? " Opening UDP does not confirm a device response." : "");
+        presetHint.hidden = false;
+    }
+    const preferred = learned || matched[0];
+    if (preferred) {
+        suggestionSelect.value = preferred.id;
+        applySuggestion(preferred);
+    }
+    if (params.has("manufacturer") || params.has("hostname")) {
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.searchParams.delete("manufacturer");
+        cleanUrl.searchParams.delete("hostname");
+        window.history.replaceState(null, "", cleanUrl);
+    }
+
+    function clearPresetHint() {
+        presetHint.hidden = true;
+        suggestionSelect.value = "";
+    }
 
     const connectionConfigControls = [
         protocolSelect,
@@ -58,6 +111,7 @@
         serialParity,
         serialStopbits,
         connectionHistory,
+        suggestionSelect,
         saveConnectionHistory,
         connectButton
     ];
@@ -94,7 +148,7 @@
         }
     }
 
-    function updateProtocolDefaults() {
+    function updateProtocolDefaults(applyPortDefault = false) {
         const protocol = protocolSelect.value;
 
         sshFields.style.display = protocol === "ssh" ? "grid" : "none";
@@ -103,8 +157,8 @@
         hostInput.closest("div").style.display = protocol === "rs232" ? "none" : "block";
         portInput.closest("div").style.display = protocol === "rs232" ? "none" : "block";
 
-        if (protocol === "ssh" && (!portInput.value || portInput.value === "23")) portInput.value = "22";
-        if (protocol === "telnet" && (!portInput.value || portInput.value === "22")) portInput.value = "23";
+        if (applyPortDefault && protocol === "ssh" && (!portInput.value || portInput.value === "23")) portInput.value = "22";
+        if (applyPortDefault && protocol === "telnet" && (!portInput.value || portInput.value === "22")) portInput.value = "23";
 
         if (protocol === "rs232") {
             loadSerialPorts();
@@ -166,6 +220,10 @@
         });
         if (data && data.success) {
             inlineInput.focus();
+            if (data.preset_learned || data.preset_warning) {
+                presetHint.textContent = data.preset_warning || "Connected. Protocol and port saved as this manufacturer's local default; other models may differ.";
+                presetHint.hidden = false;
+            }
         }
     }
 
@@ -384,6 +442,7 @@
     }
 
     function applyConnectionSettings(entry) {
+        clearPresetHint();
         protocolSelect.value = entry.protocol || "tcp";
 
         portInput.value = entry.port || "";
@@ -486,7 +545,13 @@
         }
     }
 
-    protocolSelect.addEventListener("change", updateProtocolDefaults);
+    suggestionSelect.addEventListener("change", () => {
+        const profile = profiles.get(suggestionSelect.value);
+        if (profile) applySuggestion(profile);
+        else presetHint.hidden = true;
+    });
+    protocolSelect.addEventListener("change", () => { clearPresetHint(); updateProtocolDefaults(true); });
+    portInput.addEventListener("input", clearPresetHint);
     connectButton.addEventListener("click", connect);
     disconnectButton.addEventListener("click", disconnect);
     exportButton.addEventListener("click", exportConnectionTxt);

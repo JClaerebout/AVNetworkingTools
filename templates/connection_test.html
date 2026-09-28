@@ -7,6 +7,14 @@
 <div class="card">
     <h2>Connect</h2>
     <p class="desc">PuTTY-like test page for raw TCP/UDP/Telnet data. SSH opens an authenticated shell, so username/password are required.</p>
+    <p id="connPresetHint" class="hint connection-preset-hint" role="status" hidden></p>
+    <div class="row">
+        <div>
+            <label for="connSuggestion">Connection suggestion</label>
+            <select id="connSuggestion" data-no-draft><option value="">Custom settings</option></select>
+            <p class="desc">Suggestions from the working port list and manufacturer documentation; check the device model before connecting.</p>
+        </div>
+    </div>
 
     <div class="row">
         <div>
@@ -166,9 +174,12 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='connection_presets.js') }}?v=working-list-2"></script>
 <script src="{{ url_for('static', filename='log_view.js') }}?v=2"></script>
 <script
-    src="{{ url_for('static', filename='connection_test.js') }}?v=log-view-1"
+    src="{{ url_for('static', filename='connection_test.js') }}?v=working-list-1"
+    data-learned-protocol="{{ learned_preset.protocol if learned_preset else '' }}"
+    data-learned-port="{{ learned_preset.port if learned_preset else '' }}"
     data-status-url="{{ url_for('main.connection_test_status') }}"
     data-start-url="{{ url_for('main.connection_test_start') }}"
     data-stop-url="{{ url_for('main.connection_test_stop') }}"

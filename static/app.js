@@ -139,7 +139,7 @@
 // Keep unfinished field values when navigating between tool pages in this tab.
 (function preservePageFields() {
     const storageKey = `avNetworkingTools:page-fields:${window.location.pathname}`;
-    const fieldSelector = 'input:not([type="password"]):not([data-sensitive]):not([type="hidden"]):not([type="file"]):not([type="button"]):not([type="submit"]), select:not([data-sensitive]), textarea:not([data-sensitive])';
+    const fieldSelector = 'input:not([type="password"]):not([data-sensitive]):not([type="hidden"]):not([type="file"]):not([type="button"]):not([type="submit"]), select:not([data-sensitive]):not([data-no-draft]), textarea:not([data-sensitive])';
     // Remove password entries left by older versions, including drafts from other pages.
     try {
         for (let i = 0; i < sessionStorage.length; i++) {
