@@ -5,6 +5,7 @@ real local server, but replaces the desktop window with a small route check.
 """
 
 import json
+import socket
 from pathlib import Path
 from unittest.mock import Mock, patch
 from urllib.request import urlopen
@@ -43,7 +44,15 @@ def run(desktop_app, result_file):
         checks.append("cancelled Save As")
 
     try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as temporary_socket:
+            temporary_socket.bind(("127.0.0.1", 0))
+            smoke_port = temporary_socket.getsockname()[1]
+        create_server = desktop_app.create_desktop_server
+        wait_for_server = desktop_app.wait_for_flask
         with patch.object(desktop_app, "start_manufacturer_database_update"), \
+             patch.object(desktop_app, "DEFAULT_PORT", smoke_port), \
+             patch.object(desktop_app, "create_desktop_server", side_effect=lambda: create_server(smoke_port)), \
+             patch.object(desktop_app, "wait_for_flask", side_effect=lambda instance_id, thread: wait_for_server(instance_id, thread, port=smoke_port)), \
              patch.object(desktop_app.webview, "create_window", side_effect=create_window), \
              patch.object(desktop_app.webview, "start", side_effect=inspect_window):
             desktop_app.run_desktop()

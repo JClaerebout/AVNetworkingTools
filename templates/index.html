@@ -22,9 +22,7 @@
         </div>
     </div>
 
-    {% if admin %}
-    <!--<div class="top-note ok-note">Running with Administrator rights.</div>-->
-    {% else %}
+    {% if not admin and not macos %}
     <div class="top-note">Not running as Administrator. Windows will block IP changes without elevated rights.</div>
     {% endif %}
 
@@ -46,7 +44,7 @@
                 <div class="label">Subnet</div><div>{{ nic.subnet or '-' }}</div>
                 <div class="label">Gateway</div><div>{{ nic.gateway or '-' }}</div>
                 <div class="label">DNS</div><div>{{ nic.dns | join(', ') if nic.dns else '-' }}</div>
-                <div class="label">DHCP raw</div><div>{{ nic.dhcp_raw or '-' }}</div>
+                <div class="label">IP mode</div><div>{{ 'DHCP' if nic.dhcp_raw == 'Enabled' else 'Static' if nic.dhcp_raw == 'Disabled' else '-' }}</div>
                 <div class="label">Link</div><div>{{ nic.link_status }}</div>
                 <div class="label">MAC</div><div>{{ nic.mac or '-' }}</div>
             </div>
@@ -54,13 +52,13 @@
             <form class="priority-form" method="post" action="{{ url_for('main.nic_priority') }}">
                 <input type="hidden" name="_action_token" value="{{ action_token }}">
                 <input type="hidden" name="interface_index" value="{{ nic.if_index }}">
-                <label for="priority-{{ nic.if_index }}">Priority</label>
-                <select id="priority-{{ nic.if_index }}" name="metric" class="priority-select" aria-label="Priority for {{ nic.name }}">
-                    {% if nic.metric is not defined or (not nic.automatic_metric and nic.metric not in range(1, 11)) %}
+                <label for="priority-{{ nic.if_index }}">{{ "Network Service Order" if macos else "Priority" }}</label>
+                <select id="priority-{{ nic.if_index }}" name="metric" class="priority-select" aria-label="{{ 'Service order' if macos else 'Priority' }} for {{ nic.name }}">
+                    {% if nic.metric is not defined or (not nic.automatic_metric and nic.metric not in range(1, ((nic.order_count|default(nics|length)) + 1) if macos else 11)) %}
                     <option value="" disabled selected>{{ nic.metric if nic.metric is defined else 'Unknown' }}</option>
                     {% endif %}
-                    <option value="auto" {% if nic.automatic_metric %}selected{% endif %}>Auto</option>
-                    {% for priority in range(1, 11) %}
+                    {% if not macos %}<option value="auto" {% if nic.automatic_metric %}selected{% endif %}>Auto</option>{% endif %}
+                    {% for priority in range(1, ((nic.order_count|default(nics|length)) + 1) if macos else 11) %}
                     <option value="{{ priority }}" {% if not nic.automatic_metric and nic.metric == priority %}selected{% endif %}>{{ priority }}</option>
                     {% endfor %}
                 </select>
@@ -87,10 +85,10 @@
                 <div>
                     <label>Mode</label>
                     <select name="mode" class="mode-select">
-                        <option value="static" {% if nic.status == 'static' %}selected{% endif %}>Static</option>
-                        <option value="dhcp" {% if nic.status in ['dhcp', 'dhcp_no_lease'] %}selected{% endif %}>DHCP</option>
+                        <option value="static" {% if nic.dhcp_raw != 'Enabled' %}selected{% endif %}>Static</option>
+                        <option value="dhcp" {% if nic.dhcp_raw == 'Enabled' %}selected{% endif %}>DHCP</option>
                     </select>
-                    <small class="mode-pending" hidden>Not applied</small>
+                    <small class="mode-pending" hidden>Mode change pending — click Apply</small>
                 </div>
 
                 <div class="row static-fields">
@@ -118,7 +116,7 @@
                 <div class="actions">
                     <button class="btn" type="submit">Apply</button>
                     <button class="btn secondary" type="submit" form="restore-{{ loop.index }}">Restore previous</button>
-                    <button class="btn warn dhcp-action" type="submit" form="release-{{ loop.index }}" {% if nic.dhcp_raw != 'Enabled' %}hidden{% endif %}>Release</button>
+                    <button class="btn warn dhcp-action" type="submit" form="release-{{ loop.index }}" {% if macos or nic.dhcp_raw != 'Enabled' %}hidden{% endif %}>Release</button>
                     <button class="btn secondary dhcp-action" type="submit" form="renew-{{ loop.index }}" {% if nic.dhcp_raw != 'Enabled' %}hidden{% endif %}>Renew</button>
                 </div>
             </form>

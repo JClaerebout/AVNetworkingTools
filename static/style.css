@@ -1498,6 +1498,11 @@ select {
     padding: 7px;
 }
 
+input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+select {
+    height: 32px;
+}
+
 .grid {
     gap: 10px;
 }

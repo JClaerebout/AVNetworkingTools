@@ -10,6 +10,11 @@
         Checks multicast, IGMP, PTP and RTP traffic for common AV network problems.
         Run the check for at least 2 minutes (130 seconds for IGMP query visibility) for best results.
     </p>
+    {% if macos %}
+    <p class="desc">macOS capture needs access to BPF devices. If Health Check reports a BPF permission error,
+        install the official Wireshark <a href="https://www.wireshark.org/docs/wsug_html_chunked/ChBuildInstallOSXInstall.html" target="_blank" rel="noopener noreferrer">ChmodBPF package</a>
+        and sign out and back in before retrying. This grants packet capture access to your user account.</p>
+    {% endif %}
 
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% for category, message in messages %}
@@ -114,7 +119,7 @@
     </div>
     <div id="multicastWarnings" class="diagnostic-warnings"></div>
     <h3>Standard capture limitations</h3>
-    <p class="desc">Run as Administrator. This passive Windows raw IPv4 capture analyzes only traffic visible to the selected interface; it cannot see traffic the switch does not forward to that port. DSCP and ECN are packet markings and do not verify switch QoS queues. VLAN IDs, 802.1p/PCP and Layer-2 PTP (EtherType 0x88F7) are not visible. NIC offloading and capture loss can affect measurements. Fragmented IP packets contribute to traffic totals but are not reassembled for protocol analysis. PTP common-header decoding supports version 2 over UDP 319/320; version 1 is not decoded.</p>
+    <p class="desc">{{ "Capture requires BPF access. This passive macOS tcpdump capture" if macos else "Run as Administrator. This passive Windows raw IPv4 capture" }} analyzes only traffic visible to the selected interface; it cannot see traffic the switch does not forward to that port. DSCP and ECN are packet markings and do not verify switch QoS queues. VLAN IDs, 802.1p/PCP and Layer-2 PTP (EtherType 0x88F7) are not visible. NIC offloading and capture loss can affect measurements. Fragmented IP packets contribute to traffic totals but are not reassembled for protocol analysis. PTP common-header decoding supports version 2 over UDP 319/320; version 1 is not decoded.</p>
     <p class="desc">Streams become inactive after 15 seconds. Rates count IPv4 bytes over a five-second window, excluding Ethernet overhead. No vendor-specific QoS profile is selected. Leaving this page stops capture; a 30-second page heartbeat timeout provides a fallback. No Npcap installation is required.</p>
     </details>
 </section>

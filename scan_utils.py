@@ -95,7 +95,7 @@ def _ping_command(source_ip: str, target_ip: str) -> List[str]:
     if sys.platform == "win32":
         return ["ping", "-n", "1", "-w", "350", "-S", source_ip, target_ip]
 
-    return ["ping", "-c", "1", "-W", "1", target_ip]
+    return ["ping", "-c", "1", "-W", "1000", "-S", source_ip, target_ip] if sys.platform == "darwin" else ["ping", "-c", "1", "-W", "1", target_ip]
 
 
 def _ping_host(source_ip: str, target_ip: str) -> bool:
@@ -149,6 +149,7 @@ def _discover_host(
     use_arp: bool,
     attempts: int = 2,
     stop_event=None,
+    device: str = "",
 ) -> tuple[bool, str]:
     if stop_event is not None and stop_event.is_set():
         return False, ""
@@ -160,6 +161,19 @@ def _discover_host(
 
     if not _ping_host_reliable(source_ip, target_ip, attempts, stop_event):
         return False, ""
+
+    if sys.platform == "darwin" and use_arp and device:
+        # The ICMP reply can arrive before macOS publishes the ARP entry.
+        # Resolve it here so the first visible result includes its MAC.
+        for retry in range(3):
+            mac = _macos_arp_entries(device).get(target_ip, "")
+            if mac:
+                return True, mac
+            if retry < 2:
+                if stop_event is not None and stop_event.is_set():
+                    break
+                time.sleep(0.1)
+        return True, ""
 
     return True, _get_arp_entries(source_ip).get(target_ip, "")
 
@@ -178,6 +192,10 @@ def _parse_arp(output: str) -> Dict[str, str]:
         match = pattern.search(line)
         if match:
             entries[match.group("ip")] = _normalize_mac(match.group("mac"))
+            continue
+        mac_match = re.search(r"\((?P<ip>\d+(?:\.\d+){3})\) at (?P<mac>(?:[0-9a-fA-F]{1,2}:){5}[0-9a-fA-F]{1,2})\b", line)
+        if mac_match:
+            entries[mac_match.group("ip")] = _normalize_mac(mac_match.group("mac"))
 
     return entries
 
@@ -190,6 +208,28 @@ def _get_arp_entries(source_ip: str) -> Dict[str, str]:
 
     code, stdout, stderr = run_cmd(["arp", "-a"])
     return _parse_arp(stdout if code == 0 else stdout + "\n" + stderr)
+
+
+def _macos_arp_entries(device: str) -> Dict[str, str]:
+    """Return resolved unicast neighbors on the selected Mac interface."""
+    code, output, _ = run_cmd(["arp", "-an"], timeout=5)
+    if code:
+        return {}
+    entries = {}
+    pattern = re.compile(
+        r"\((?P<ip>\d+(?:\.\d+){3})\) at "
+        r"(?P<mac>(?:[0-9a-fA-F]{1,2}:){5}[0-9a-fA-F]{1,2}) "
+        r"on (?P<device>\S+)\b"
+    )
+    for line in output.splitlines():
+        match = pattern.search(line)
+        if not match or match["device"] != device:
+            continue
+        mac = _normalize_mac(match["mac"])
+        if int(mac[:2], 16) & 1:
+            continue
+        entries[match["ip"]] = mac
+    return entries
 
 
 def _reverse_dns(ip: str) -> str:
@@ -891,10 +931,16 @@ def _add_result(item: Dict) -> None:
     global _scan_results
 
     with _scan_lock:
-        existing_ips = {result["ip"] for result in _scan_results}
-        if item["ip"] not in existing_ips:
-            _scan_results.append(item)
-            _scan_results.sort(key=lambda x: ipaddress.ip_address(x["ip"]))
+        for result in _scan_results:
+            if result["ip"] == item["ip"]:
+                # A ping may discover a host before its ARP entry is ready.
+                # Keep its lookup state while filling in the later MAC.
+                if item.get("mac") and not result.get("mac"):
+                    result["mac"] = item["mac"]
+                    result["seen_macs"] = [item["mac"]]
+                return
+        _scan_results.append(item)
+        _scan_results.sort(key=lambda x: ipaddress.ip_address(x["ip"]))
 
 def _update_result(ip: str, updates: Dict) -> None:
     with _scan_lock:
@@ -1101,6 +1147,7 @@ def _scan_worker_impl(interface_name: str, custom_subnet: str = "", quick_scan: 
                 ipaddress.ip_address(ip) in local_network,
                 _SCAN_PING_RETRIES,
                 _scan_stop,
+                nic.get("device", ""),
             ): ip
             for ip in scan_targets
         }
@@ -1136,6 +1183,46 @@ def _scan_worker_impl(interface_name: str, custom_subnet: str = "", quick_scan: 
                     "seen_macs": [mac] if mac else [],
                     "web_services": [],
                 })
+
+    if sys.platform == "darwin" and not _scan_stop.is_set():
+        # ICMP-silent hosts still answer link-layer resolution during the sweep.
+        # Limit cached neighbors to this interface and the scanned on-link range.
+        neighbors = _macos_arp_entries(nic.get("device", ""))
+        with _scan_lock:
+            found_ips = {item["ip"] for item in _scan_results}
+        unresolved = [ip for ip in scan_targets if ip not in found_ips
+                      and ip not in neighbors and ipaddress.ip_address(ip) in local_network]
+        if unresolved:
+            # A slower second pass avoids losing ARP replies when the first
+            # highly parallel ping sweep saturates the Mac's neighbor cache.
+            with ThreadPoolExecutor(max_workers=24) as executor:
+                replies = list(executor.map(
+                    lambda ip: _ping_host(source_ip, ip) if not _scan_stop.is_set() else False,
+                    unresolved,
+                ))
+            neighbors = _macos_arp_entries(nic.get("device", ""))
+            for ip, replied in zip(unresolved, replies):
+                if replied:
+                    mac = neighbors.get(ip, "")
+                    _add_result({
+                        "ip": ip, "mac": mac,
+                        "manufacturer": "-" if quick_scan else "Looking up...",
+                        "hostname": "-" if quick_scan else "Looking up...",
+                        "missing": False, "miss_count": 0,
+                        "duplicate_ip": False, "duplicate_macs": [],
+                        "seen_macs": [mac] if mac else [], "web_services": [],
+                    })
+        for ip, mac in neighbors.items():
+            if ip not in scan_targets or ipaddress.ip_address(ip) not in local_network:
+                continue
+            _add_result({
+                "ip": ip, "mac": mac,
+                "manufacturer": "-" if quick_scan else "Looking up...",
+                "hostname": "-" if quick_scan else "Looking up...",
+                "missing": False, "miss_count": 0,
+                "duplicate_ip": False, "duplicate_macs": [],
+                "seen_macs": [mac], "web_services": [],
+            })
 
     with _scan_lock:
         found = len(_scan_results)

@@ -24,7 +24,7 @@
                 <option value="udp">UDP</option>
                 <option value="telnet">Telnet</option>
                 <option value="ssh">SSH</option>
-                <option value="rs232">RS232 / COM</option>
+                <option value="rs232">RS232 / {{ "Serial" if macos else "COM" }}</option>
             </select>
         </div>
         <div>
@@ -55,12 +55,12 @@
         </div>
         <div id="serialFields" class="row" style="display:none;">
             <div>
-                <label>COM port</label>
+                <label>{{ "Serial port" if macos else "COM port" }}</label>
                 <select id="serialPort"></select>
             </div>
             <div>
                 <label>&nbsp;</label>
-                <button id="refreshSerialPorts" class="btn secondary" type="button">Refresh COM ports</button>
+                <button id="refreshSerialPorts" class="btn secondary" type="button">Refresh {{ "serial ports" if macos else "COM ports" }}</button>
             </div>
             <div>
                 <label>Baudrate</label>

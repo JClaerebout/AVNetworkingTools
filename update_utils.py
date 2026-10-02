@@ -1,7 +1,9 @@
 import hashlib
 import json
 import os
+import platform
 import re
+import ssl
 import subprocess
 import sys
 import tempfile
@@ -13,12 +15,13 @@ from urllib.request import Request, urlopen
 
 from config import BASE_DIR
 from version import APP_VERSION, GITHUB_REPOSITORY
+from platform_backend import IS_MACOS
 
 
 LATEST_RELEASE_URL = f"https://api.github.com/repos/{GITHUB_REPOSITORY}/releases/latest"
 USER_AGENT = f"AVNetworkingTools/{APP_VERSION}"
 MAX_DOWNLOAD_BYTES = 500 * 1024 * 1024
-_ASSET_NAMES = {"avnetworkingtools.exe"}
+_ASSET_NAMES = {"avnetworkingtools.exe", "avnetworkingtools-windows-x64.exe"}
 _state_lock = threading.Lock()
 _update_state = {
     "status": "idle",
@@ -58,13 +61,28 @@ def is_newer_version(candidate: str, current: str = APP_VERSION) -> bool:
     return candidate_parts + (0,) * (width - len(candidate_parts)) > current_parts + (0,) * (width - len(current_parts))
 
 
+def _ssl_context():
+    if IS_MACOS:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    return None
+
 def _read_json(url: str, timeout: int = 8):
     request = Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": USER_AGENT})
-    with urlopen(request, timeout=timeout) as response:
+    with urlopen(request, timeout=timeout, context=_ssl_context()) as response:
         return json.load(response)
 
 
 def _select_executable_asset(assets):
+    if IS_MACOS:
+        arch = platform.machine().lower()
+        preferred = ["avnetworkingtools-macos-universal.dmg",
+                     "avnetworkingtools-macos-arm64.dmg" if arch == "arm64" else "avnetworkingtools-macos-x64.dmg"]
+        for name in preferred:
+            matches = [asset for asset in assets if str(asset.get("name", "")).lower() == name]
+            if len(matches) == 1:
+                return matches[0]
+        return None
     executable_assets = [asset for asset in assets if str(asset.get("name", "")).lower() in _ASSET_NAMES]
     return executable_assets[0] if len(executable_assets) == 1 else None
 
@@ -82,11 +100,11 @@ def check_for_update():
         "release_name": release.get("name") or tag,
         "release_url": release.get("html_url", ""),
         "published_at": release.get("published_at", ""),
-        "can_auto_update": bool(getattr(sys, "frozen", False)),
+        "can_auto_update": IS_MACOS or bool(getattr(sys, "frozen", False)),
     }
 
     if available and asset is None:
-        result["error"] = "The latest release does not contain exactly one supported AVNetworkingTools EXE asset."
+        result["error"] = "The latest release does not contain a supported asset for this Mac." if IS_MACOS else "The latest release does not contain exactly one supported AVNetworkingTools EXE asset."
     return result
 
 
@@ -108,7 +126,7 @@ def _download_latest_release():
         if not is_newer_version(tag):
             raise RuntimeError("No newer release is available.")
         if asset is None:
-            raise RuntimeError("The release does not contain exactly one supported EXE asset.")
+            raise RuntimeError("The release does not contain a supported asset for this computer.")
 
         download_url = str(asset.get("browser_download_url", ""))
         digest = str(asset.get("digest", ""))
@@ -119,13 +137,13 @@ def _download_latest_release():
 
         update_dir = Path(tempfile.gettempdir()) / "AVNetworkingToolsUpdate" / tag
         update_dir.mkdir(parents=True, exist_ok=True)
-        destination = update_dir / "AVNetworkingTools.exe"
-        partial = update_dir / "AVNetworkingTools.exe.part"
+        destination = update_dir / str(asset["name"])
+        partial = update_dir / (str(asset["name"]) + ".part")
         request = Request(download_url, headers={"User-Agent": USER_AGENT})
         hasher = hashlib.sha256()
         downloaded = 0
 
-        with urlopen(request, timeout=30) as response, partial.open("wb") as output:
+        with urlopen(request, timeout=30, context=_ssl_context()) as response, partial.open("wb") as output:
             total = int(response.headers.get("Content-Length", asset.get("size", 0)) or 0)
             if total > MAX_DOWNLOAD_BYTES:
                 raise RuntimeError("The update is larger than the allowed download size.")
@@ -149,7 +167,7 @@ def _download_latest_release():
         partial.replace(destination)
         _set_state(
             status="ready",
-            message="Update downloaded and verified. Restarting to install...",
+            message="Update downloaded and verified. Open the DMG to install." if IS_MACOS else "Update downloaded and verified. Restarting to install...",
             downloaded_path=str(destination),
             version=tag.lstrip("vV"),
         )
@@ -158,7 +176,7 @@ def _download_latest_release():
 
 
 def start_update_download():
-    if not getattr(sys, "frozen", False):
+    if not IS_MACOS and not getattr(sys, "frozen", False):
         return False, "Automatic replacement is only available in the packaged EXE."
 
     with _state_lock:
@@ -246,7 +264,19 @@ try {
 
 
 def install_downloaded_update():
-    if not getattr(sys, "frozen", False):
+    if IS_MACOS:
+        state = get_update_state()
+        if state.get("status") != "ready":
+            return False, "The update has not finished downloading."
+        source = Path(state["downloaded_path"]).resolve()
+        if not source.is_file() or source.suffix.lower() != ".dmg":
+            return False, "The verified DMG is missing."
+        try:
+            subprocess.Popen(["/usr/bin/open", str(source)], close_fds=True)
+        except OSError as exc:
+            return False, f"Could not open the update: {exc}"
+        return True, "DMG opened. Drag AVNetworkingTools to Applications after closing this app."
+    if not IS_MACOS and not getattr(sys, "frozen", False):
         return False, "Automatic replacement is only available in the packaged EXE."
 
     state = get_update_state()

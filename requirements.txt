@@ -1,7 +1,10 @@
 Flask>=3.0.0
+certifi>=2024.0.0; sys_platform == "darwin"
 paramiko>=3.4.0
 pyinstaller>=6.0.0
 pyserial>=3.5
 pywebview>=5.0.0
-pywin32>=306
+pywin32>=306; sys_platform == "win32"
+pyobjc-framework-CoreWLAN>=10.0; sys_platform == "darwin"
+pyobjc-framework-CoreLocation>=10.0; sys_platform == "darwin"
 waitress>=3.0.0

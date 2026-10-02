@@ -16,7 +16,7 @@
         if (!info.available || sessionStorage.getItem('dismissedUpdateVersion') === info.latest_version) return;
 
         message.textContent = `Version ${info.latest_version} is available. You currently have version ${info.current_version}.`;
-        status.textContent = info.error || (info.can_auto_update ? '' : 'Run the packaged EXE to install updates automatically.');
+        status.textContent = info.error || (info.can_auto_update ? '' : 'Run the packaged app to install updates.');
         updateNow.disabled = Boolean(info.error) || !info.can_auto_update;
         dialog.hidden = false;
     }

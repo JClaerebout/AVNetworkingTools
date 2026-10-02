@@ -30,10 +30,12 @@ class RequestProtectionTests(unittest.TestCase):
     def test_json_action_and_origin_validation(self, run):
         headers = {"X-AV-Token": self.token, "Origin":"http://localhost"}
         self.assertEqual(self.client.post("/command-line/run",json={"command":"mock"},headers=headers).status_code,200)
+        headers["Origin"] = "http://127.0.0.1"
+        self.assertEqual(self.client.post("/command-line/run",json={"command":"mock"},headers=headers).status_code,200)
         for origin in ("https://untrusted.invalid", "null", "http://localhost:4444"):
             headers["Origin"] = origin
             self.assertEqual(self.client.post("/command-line/run",json={},headers=headers).status_code,403)
-        self.assertEqual(run.call_count,1)
+        self.assertEqual(run.call_count,2)
 
     def test_update_delete_and_beacon_routes_protected(self):
         for method, path in (("POST","/api/update/install"),("DELETE","/scripts/saved/test"),("POST","/multicast/stop")):
@@ -54,6 +56,17 @@ class RequestProtectionTests(unittest.TestCase):
         response = self.client.get("/")
         self.assertEqual(response.status_code,200)
         self.assertEqual(response.data.count(b'name="_action_token"'),5)
+
+    def test_disconnected_nic_shows_configured_mode(self):
+        nic = {"name": "Offline", "description": "USB LAN", "if_index": 1,
+               "metric": 1, "automatic_metric": False, "status": "disconnected",
+               "dhcp_raw": "Enabled", "link_status": "Disconnected", "dns": [],
+               "ip": "", "subnet": "", "gateway": "", "mac": ""}
+        with patch("routes.get_nics", return_value=[nic]):
+            page = self.client.get("/").get_data(as_text=True)
+        self.assertIn('<option value="dhcp" selected>DHCP</option>', page)
+        self.assertIn('>IP mode</div><div>DHCP</div>', page)
+        self.assertIn('class="mode-pending" hidden', page)
 
 
 class ScanFixTests(unittest.TestCase):

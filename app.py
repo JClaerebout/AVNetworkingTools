@@ -23,6 +23,7 @@ def create_app() -> Flask:
     app = Flask(__name__)
     app.secret_key = SECRET_KEY
     app.jinja_env.globals["app_version"] = APP_VERSION
+    app.jinja_env.globals["macos"] = sys.platform == "darwin"
     app.config["INSTANCE_ID"] = secrets.token_urlsafe(24)
     install_request_protection(app)
     app.register_blueprint(main_bp)
@@ -44,8 +45,14 @@ class PortInUseError(RuntimeError):
     """The desktop app cannot own its fixed local port."""
 
 
+_server_stopping = threading.Event()
+
 def start_flask(server):
-    server.run()
+    try:
+        server.run()
+    except OSError:
+        if not _server_stopping.is_set():
+            raise
 
 
 def create_desktop_server(port=DEFAULT_PORT):
@@ -81,6 +88,7 @@ def run_desktop():
         server = create_desktop_server()
     except OSError as exc:
         raise PortInUseError(f"AVNetworkingTools is already running, or port {DEFAULT_PORT} is in use. Close the other application before starting a new window.") from exc
+    _server_stopping.clear()
     flask_thread = threading.Thread(target=start_flask, args=(server,), daemon=True)
     try:
         flask_thread.start()
@@ -93,6 +101,8 @@ def run_desktop():
         webview.start()
     finally:
         stop_background_tasks()
+        _server_stopping.set()
+        server.task_dispatcher.shutdown()
         server.close()
         if flask_thread.is_alive():
             flask_thread.join(timeout=2)

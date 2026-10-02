@@ -16,8 +16,21 @@ def install_request_protection(app):
         if host not in {"localhost", "127.0.0.1", "::1"}:
             return jsonify(success=False, message="Unrecognized local application host."), 403
         origin = request.headers.get("Origin")
-        if origin and origin != request.host_url.rstrip("/"):
-            return jsonify(success=False, message="Request origin is not this application."), 403
+        if origin:
+            parsed = urlsplit(origin)
+            # WebKit can use localhost for a window opened at 127.0.0.1.
+            # Both names still resolve to this loopback listener, and the
+            # per-run action token is required for every modifying request.
+            same_loopback = parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+            same_scheme = parsed.scheme == urlsplit(request.host_url).scheme
+            try:
+                same_port = parsed.port == urlsplit(request.host_url).port
+            except ValueError:
+                same_port = False
+            if not (same_loopback and same_scheme and same_port and not parsed.username
+                    and not parsed.password and not parsed.path and not parsed.query
+                    and not parsed.fragment):
+                return jsonify(success=False, message="Request origin is not this application."), 403
         if request.headers.get("Sec-Fetch-Site") == "cross-site":
             return jsonify(success=False, message="Cross-site requests are not allowed."), 403
         if request.method not in {"GET", "HEAD", "OPTIONS"}:

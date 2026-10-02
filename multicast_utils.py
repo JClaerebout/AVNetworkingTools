@@ -15,6 +15,7 @@ from analyzer_diagnostics import evaluate
 
 from nic_utils import get_nics
 from system_utils import run_cmd
+from platform_backend import IS_MACOS
 
 
 RATE_WINDOW_SECONDS = 5
@@ -106,6 +107,8 @@ def _parse_join_output(output: str, wanted_index: int) -> set[str]:
 
 
 def _read_joined_groups(if_index: int) -> Optional[set[str]]:
+    if IS_MACOS:
+        return None
     code, stdout, _stderr = run_cmd(["netsh", "interface", "ipv4", "show", "joins"], timeout=3)
     if code != 0:
         return None
@@ -220,6 +223,12 @@ def touch_multicast_capture():
 
 def _open_raw_capture(interface_ip: str):
     """Backend boundary: return a socket delivering IPv4 packets, without link headers."""
+    if IS_MACOS:
+        from platform_backend.macos.capture import TcpdumpCapture
+        nic = next((n for n in get_nics() if n.get("ip") == interface_ip), None)
+        if not nic:
+            raise OSError("Capture interface is unavailable.")
+        return TcpdumpCapture(nic["device"])
     capture = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_IP)
     try:
         capture.bind((interface_ip, 0))
@@ -256,7 +265,8 @@ def _capture(interface_ip: str) -> None:
                 break
     except PermissionError:
         with _lock:
-            _state["error"] = "Packet capture requires running AVNetworkingTools as administrator."
+            _state["error"] = ("Packet capture needs macOS BPF access. See the ChmodBPF setup link above."
+                               if IS_MACOS else "Packet capture requires running AVNetworkingTools as administrator.")
             _state["message"] = _state["error"]
     except (OSError, AttributeError) as exc:
         with _lock:
@@ -378,7 +388,7 @@ def get_multicast_status() -> dict:
 
     warnings = []
     if state["groups"] and not membership_available:
-        warnings.append({"severity": "warning", "code": "membership_unknown", "message": "Windows joined-group data is unavailable; flooding assessment is incomplete."})
+        warnings.append({"severity": "warning", "code": "membership_unknown", "message": "Joined-group data is unavailable; flooding assessment is incomplete." if IS_MACOS else "Windows joined-group data is unavailable; flooding assessment is incomplete."})
     if len(queriers) > 1:
         warnings.append({"severity": "warning", "code": "multiple_queriers", "message": "Multiple IGMP query sources observed; querier election or duplicate configuration may be occurring."})
     if len(state["igmp_versions"]) > 1 or "v1" in state["igmp_versions"]:

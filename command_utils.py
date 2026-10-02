@@ -40,12 +40,13 @@ def run_command(command: str, working_directory: str = "") -> dict:
             "exit_code": None,
         }
 
-    shell = os.environ.get("COMSPEC", "cmd.exe")
+    shell = os.environ.get("COMSPEC", "cmd.exe") if os.name == "nt" else "/bin/zsh"
+    shell_args = [shell, "/d", "/s", "/c", command] if os.name == "nt" else [shell, "-c", command]
     creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
     try:
         completed = subprocess.run(
-            [shell, "/d", "/s", "/c", command],
+            shell_args,
             cwd=str(cwd),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,

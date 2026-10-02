@@ -141,7 +141,7 @@
         text("summaryIgmpCounts", `${counts.query || 0} / ${counts.report || 0} / ${counts.leave || 0}`);
         text("queryKinds", `General queries: ${counts.general_query || 0}; group-specific queries: ${counts.group_query || 0}; malformed: ${counts.invalid || 0}`);
         el("querierDetails").innerHTML = data.queriers.map(q => `<p>${escapeHtml(q.ip)}: last query ${q.last_query_seconds} seconds ${running ? "ago" : "before stop"}; estimated interval ${q.query_interval_seconds ?? "measuring"} seconds</p>`).join("") || "No query sources observed.";
-        text("joinedGroups", data.membership_available ? data.joined_groups.join(", ") || "None" : "Windows membership data unavailable");
+        text("joinedGroups", data.membership_available ? data.joined_groups.join(", ") || "None" : "Membership data unavailable");
         text("floodingObservations", data.warnings.filter(w => ["snooping","unjoined_traffic","unjoined_observed","membership_unknown"].includes(w.code)).map(w => w.message).join(" ") || "No current flooding observations.");
         el("igmpEvents").innerHTML = [...data.igmp_events].reverse().map(e => `<tr>${cells([stamp(e.timestamp),e.source,e.version,e.event_type,e.groups.join(", ") || "All groups / none"])}</tr>`).join("") || '<tr><td colspan="5">No IGMP events observed.</td></tr>';
         text("dscpDistribution", data.dscp_distribution.map(d => `${d.value} (${d.class}): ${d.packets} packets`).join(" · ") || "No multicast markings observed.");

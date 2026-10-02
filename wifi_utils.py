@@ -3,6 +3,7 @@ import threading
 import time
 from collections import defaultdict
 from system_utils import run_cmd
+from platform_backend import IS_MACOS
 
 _wifi_lock = threading.Lock()
 _wifi_thread = None
@@ -710,20 +711,28 @@ def _scan_loop():
 
     while not _wifi_stop.is_set():
         try:
-            raw = _run_netsh()
-            parsed = _parse_netsh(raw)
-            if "BSSID" in raw.upper() and not parsed:
-                raise ValueError("Could not read Wi-Fi records from Windows output; check the Windows display language.")
+            if IS_MACOS:
+                from platform_backend.macos.wifi import scan
+                items, cached = scan()
+                parsed = _finalize_scan_items(items)
+            else:
+                cached = False
+                raw = _run_netsh()
+                parsed = _parse_netsh(raw)
+                if "BSSID" in raw.upper() and not parsed:
+                    raise ValueError("Could not read Wi-Fi records from Windows output; check the Windows display language.")
             grouped = _group_results(parsed)
 
             with _wifi_lock:
                 _wifi_results = grouped
-                _wifi_message = f"Last scan found {len(grouped)} SSID(s)."
+                _wifi_message = (f"Showing {len(grouped)} previously scanned SSID(s); macOS could not refresh yet."
+                                 if cached else f"Last scan found {len(grouped)} SSID(s).")
         except Exception as exc:
             with _wifi_lock:
-                _wifi_message = f"WiFi scan error: {exc}"
+                _wifi_message = ("Wi-Fi refresh unavailable; showing previous results."
+                                 if IS_MACOS and _wifi_results else f"WiFi scan error: {exc}")
 
-        for _ in range(5):
+        for _ in range(20 if IS_MACOS else 5):
             if _wifi_stop.is_set():
                 break
             time.sleep(1)

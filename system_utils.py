@@ -1,4 +1,5 @@
 import ctypes
+import os
 import locale
 import subprocess
 import sys
@@ -6,6 +7,8 @@ from typing import List, Optional
 
 
 def is_admin() -> bool:
+    if sys.platform == "darwin":
+        return os.geteuid() == 0
     try:
         return bool(ctypes.windll.shell32.IsUserAnAdmin())
     except Exception:

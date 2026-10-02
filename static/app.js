@@ -333,7 +333,7 @@ function showOperationNotice(message, category = 'info') {
 }
 
 function operationMessage(form) {
-    if (form.classList.contains('priority-form')) return 'Updating IPv4 priority...';
+    if (form.classList.contains('priority-form')) return document.body.dataset.platform === 'macos' ? 'Updating network service order...' : 'Updating IPv4 priority...';
     if (form.id.startsWith('release-')) return 'Releasing DHCP lease...';
     if (form.id.startsWith('restore-')) return 'Restoring previous network settings...';
     if (form.id.startsWith('renew-')) return 'Renewing DHCP lease...';
@@ -415,6 +415,7 @@ document.querySelectorAll('.config-form, .priority-form, form[id^="release-"], f
                 }
             }
             hideNicBusyOverlay(busyCard);
+            if (operationSucceeded && form.classList.contains('priority-form') && document.body.dataset.platform === 'macos') { window.location.reload(); return; }
             if (operationSucceeded) startNicRefreshBurst();
             else if (form.classList.contains('priority-form')) refreshNicStatus();
         };
@@ -441,6 +442,14 @@ async function refreshNicStatus() {
         if (!response.ok) throw new Error(data.message || 'Could not refresh NICs.');
         // A network operation may have started while the status request was running.
         if (document.querySelector('.nic-card.is-busy')) return;
+        if (document.body.dataset.platform === 'macos') {
+            const shown = Array.from(document.querySelectorAll('.nic-card'), card => card.dataset.interfaceIndex);
+            const connected = data.nics.map(nic => String(nic.if_index));
+            if (shown.length !== connected.length || shown.some((index, position) => index !== connected[position])) {
+                window.location.reload();
+                return;
+            }
+        }
         for (const nic of data.nics) {
             const card = Array.from(document.querySelectorAll('.nic-card'))
                 .find(item => item.dataset.interfaceIndex === String(nic.if_index));
@@ -448,7 +457,8 @@ async function refreshNicStatus() {
             const status = card.querySelector('.status');
             status.className = `status ${nic.status}`;
             status.textContent = nic.status;
-            const values = [nic.ip, nic.subnet, nic.gateway, (nic.dns || []).join(', '), nic.dhcp_raw, nic.link_status, nic.mac];
+            const ipMode = nic.dhcp_raw === 'Enabled' ? 'DHCP' : nic.dhcp_raw === 'Disabled' ? 'Static' : '-';
+            const values = [nic.ip, nic.subnet, nic.gateway, (nic.dns || []).join(', '), ipMode, nic.link_status, nic.mac];
             card.querySelectorAll('.details > div:not(.label)').forEach((element, index) => {
                 element.textContent = values[index] || '-';
             });
@@ -467,7 +477,7 @@ async function refreshNicStatus() {
                 }
                 priority.value = value;
             }
-            card.querySelectorAll('.dhcp-action').forEach(button => { button.hidden = nic.dhcp_raw !== 'Enabled'; });
+            card.querySelectorAll('.dhcp-action').forEach(button => { button.hidden = document.body.dataset.platform === 'macos' && button.classList.contains('warn') || nic.dhcp_raw !== 'Enabled'; });
             syncNicForm(card, nic);
         }
     } catch (error) {

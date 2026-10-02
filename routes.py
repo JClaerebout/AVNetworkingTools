@@ -2,6 +2,7 @@ import csv
 import io
 import ipaddress
 import webbrowser
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -79,7 +80,7 @@ def index():
         nics = []
         flash(f"Could not scan NICs: {exc}", "error")
 
-    return render_template("index.html", nics=nics, history=load_history(), admin=is_admin())
+    return render_template("index.html", nics=nics, history=load_history(), admin=is_admin(), macos=sys.platform == "darwin")
 
 
 @main_bp.route("/apply", methods=["POST"])

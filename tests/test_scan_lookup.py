@@ -110,6 +110,53 @@ class ScanLookupTests(unittest.TestCase):
         arp_probe.assert_not_called()
         ping_host.assert_called_once()
 
+    @patch("scan_utils.sys.platform", "darwin")
+    @patch("scan_utils.time.sleep")
+    @patch("scan_utils._macos_arp_entries", side_effect=[{}, {"192.168.0.25": "AA:BB:CC:DD:EE:FF"}])
+    @patch("scan_utils._ping_host_reliable", return_value=True)
+    def test_macos_discovery_waits_for_mac_before_reporting_host(self, _ping, arp_entries, sleep):
+        self.assertEqual(
+            scan_utils._discover_host("192.168.0.10", "192.168.0.25", True,
+                                      device="en0"),
+            (True, "AA:BB:CC:DD:EE:FF"),
+        )
+        self.assertEqual(arp_entries.call_count, 2)
+        sleep.assert_called_once_with(0.1)
+
+    @patch("scan_utils.sys.platform", "darwin")
+    @patch("scan_utils._lookup_worker")
+    @patch("scan_utils._macos_arp_entries", return_value={"192.168.0.2": "AA:BB:CC:DD:EE:FF"})
+    @patch("scan_utils._discover_host", return_value=(True, "AA:BB:CC:DD:EE:FF"))
+    @patch("scan_utils._find_nic", return_value=(True, {
+        "ip": "192.168.0.1", "mac": "00:11:22:33:44:55",
+        "network": "192.168.0.0/30", "device": "en0",
+    }))
+    def test_macos_quick_scan_has_mac_without_lookup(self, _nic, discover, _arp, lookup):
+        scan_utils._scan_results = []
+        scan_utils._scan_stop.clear()
+        scan_utils._scan_worker_impl("Ethernet", quick_scan=True)
+
+        device = next(item for item in scan_utils._scan_results if item["ip"] == "192.168.0.2")
+        self.assertEqual(device["mac"], "AA:BB:CC:DD:EE:FF")
+        self.assertEqual(device["manufacturer"], "-")
+        self.assertEqual(device["hostname"], "-")
+        self.assertFalse(scan_utils._lookup_running)
+        self.assertTrue(scan_utils._last_scan_context["completed"])
+        self.assertIn("Quick scan complete", scan_utils._scan_message)
+        discover.assert_called_once()
+        lookup.assert_not_called()
+
+    def test_later_arp_result_fills_missing_mac_without_resetting_lookup(self):
+        scan_utils._scan_results = []
+        scan_utils._add_result({"ip": "192.168.0.25", "mac": "", "seen_macs": [],
+                                "manufacturer": "Looking up...", "hostname": "Looking up..."})
+        scan_utils._add_result({"ip": "192.168.0.25", "mac": "AA:BB:CC:DD:EE:FF",
+                                "seen_macs": ["AA:BB:CC:DD:EE:FF"], "manufacturer": "-", "hostname": "-"})
+        self.assertEqual(len(scan_utils._scan_results), 1)
+        self.assertEqual(scan_utils._scan_results[0]["mac"], "AA:BB:CC:DD:EE:FF")
+        self.assertEqual(scan_utils._scan_results[0]["seen_macs"], ["AA:BB:CC:DD:EE:FF"])
+        self.assertEqual(scan_utils._scan_results[0]["manufacturer"], "Looking up...")
+
     @patch("scan_utils._discover_host", return_value=(True, "8C:16:45:E6:7D:E7"))
     def test_monitor_uses_arp_capable_discovery_for_local_devices(self, discover_host):
         stop_event = scan_utils.threading.Event()

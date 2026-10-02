@@ -1,9 +1,19 @@
-# Windows build and checks
+# Building AVNetworkingTools 2.0.0
 
-Use 64-bit Python 3.14.3 and Node.js. `check.bat` runs the Python and JavaScript checks in one command. `build.bat` installs the exact dependency versions in `requirements-build.txt`, runs those checks, then builds with the sole PyInstaller spec, `AVNetworkingTools.spec`.
+## Local development
 
-After the build, run `powershell -ExecutionPolicy Bypass -File .\smoke-packaged.ps1`. The EXE requests administrator access. This headless packaged check starts its real local server, visits the home, IP Scan, Connect and Health Check pages, checks that cancelling Save As writes nothing, and closes the server. It writes `dist\packaged-smoke.json`.
+Windows x64: install 64-bit Python and Node.js. Run `python -m pip install -r requirements.txt`, `check.bat`, and `python app.py` from an Administrator terminal. `build.bat` keeps the existing pinned Windows build and PyInstaller spec. Run `smoke-packaged.ps1` after building. Windows runtime regression testing is still required on Windows.
 
-If the app is open and Windows locks `dist\AVNetworkingTools.exe`, `build.bat` leaves the new build at `dist\pending\AVNetworkingTools.exe`. Test that build with `powershell -ExecutionPolicy Bypass -File .\smoke-packaged.ps1 -Executable 'dist\pending\AVNetworkingTools.exe'`.
+macOS arm64 or Intel: use a native Python 3.12+ installation for that architecture. In a virtual environment, run `python3 -m pip install -r requirements.txt`, then `python3 app.py`. Use `./build-macos.sh` for `dist/AVNetworkingTools.app`. The app stores data in `~/Library/Application Support/AVNetworkingTools/`. No Apple certificate is needed for local builds.
 
-Finally, open the EXE normally and check the Connect suggestion picker with scanned manufacturer and hostname data, its alternative profiles, editable protocol/port, and learned-setting priority. The headless check does not inspect the rendered desktop window.
+macOS network configuration uses `networksetup` with the signed-in user’s rights first. If macOS rejects a change for insufficient privileges, the app requests administrator authorization for the IP and DNS commands together. It never launches the whole app as root. Service order replaces Windows interface metric. Confirm the selected service and settings before changing them. Capture uses `tcpdump` and requires BPF device access. Apple documents running `sudo tcpdump` for packet capture. This local build does not elevate its capture subprocess. For local capture, Wireshark documents installing its official ChmodBPF package, which grants BPF access to the user after a new login. This is a system-level permission change; review it before installing. Do not run the entire app as root or make `/dev/bpf` world-writable. A scoped privileged capture helper is still needed for general distribution. CoreWLAN requires Location Services authorization to show nearby networks and identifiers. The Wi-Fi Scan button requests access when needed. If access was denied, enable AVNetworkingTools in System Settings > Privacy & Security > Location Services. The app does not disable macOS privacy or security controls.
+
+The macOS build is native arm64 or x86_64. `AVNETWORKINGTOOLS_TARGET_ARCH=universal2 ./build-macos.sh` is supported only if the Python interpreter and every native wheel contains both slices. The local arm64 dependency set includes arm64-only wheels, so separate architecture builds are the reliable option at present. Build Intel on an Intel Python environment and test on a real Intel Mac.
+
+A DMG can be made locally with `hdiutil create -volname AVNetworkingTools -srcfolder dist/AVNetworkingTools.app -ov -format UDZO dist/AVNetworkingTools-macOS-arm64.dmg` (change the architecture name for an Intel build). The app's updater checks GitHub Releases and opens a verified DMG for manual installation. It does not replace a running `.app`.
+
+## Public release preparation
+
+Build Windows and each macOS architecture from the same versioned source, then attach the Windows EXE and Mac DMG assets to one release. No release workflow exists in this repository yet; create and validate one separately before publishing. The Windows updater accepts `AVNetworkingTools.exe` or `AVNetworkingTools-Windows-x64.exe`; macOS accepts `AVNetworkingTools-macOS-universal.dmg` or the matching `arm64`/`x64` DMG. Include GitHub SHA-256 asset digests for the updater.
+
+For distribution, sign the `.app` with an Apple Developer ID Application certificate, use hardened runtime where required, notarize the archive/DMG with Apple notary service, and staple the ticket. Store certificate and notary credentials outside the repository. Test signed builds on clean macOS installations, including Location Services and capture permissions.

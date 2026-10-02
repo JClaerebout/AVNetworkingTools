@@ -7,7 +7,6 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 from history import save_history_entry
-import win32com.client
 from system_utils import run_cmd, run_powershell
 
 
@@ -89,6 +88,7 @@ def normalize_dhcp_status(value) -> str:
 
 
 def get_wmi():
+    import win32com.client
     return win32com.client.GetObject("winmgmts:")
 
 
@@ -420,3 +420,17 @@ def renew_dhcp(interface_name: str) -> tuple[bool, str]:
     if code != 0:
         return False, stderr or stdout or f"Failed to renew DHCP lease on '{interface_name}'."
     return True, f"DHCP lease renewed on '{interface_name}'."
+
+
+# Keep the proven Windows implementation above; route only native operations on macOS.
+from platform_backend import IS_MACOS
+if IS_MACOS:
+    from platform_backend.macos import nic as _mac_nic
+    get_nics = _mac_nic.get_nics
+    is_interface_connected = _mac_nic.is_interface_connected
+    set_dhcp = _mac_nic.set_dhcp
+    set_static = _mac_nic.set_static
+    release_dhcp = _mac_nic.release_dhcp
+    renew_dhcp = _mac_nic.renew_dhcp
+    set_interface_metric = _mac_nic.set_interface_metric
+    restore_previous_config = _mac_nic.restore_previous_config

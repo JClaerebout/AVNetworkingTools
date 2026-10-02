@@ -24,7 +24,9 @@ def get_base_dir() -> Path:
     """
     appdata = os.getenv("APPDATA")
 
-    if appdata:
+    if sys.platform == "darwin":
+        base_dir = Path.home() / "Library" / "Application Support" / APP_NAME
+    elif appdata:
         base_dir = Path(appdata) / APP_NAME
     elif getattr(sys, "frozen", False):
         base_dir = Path(sys.executable).resolve().parent / "data"

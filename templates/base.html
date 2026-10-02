@@ -38,7 +38,7 @@
     </style>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=compact-2">
 </head>
-<body>
+<body data-platform="{{ 'macos' if macos else 'windows' }}">
 {% set current_endpoint = request.endpoint or '' %}
 {% set more_endpoints = ['main.scripts_page', 'main.command_line_page', 'main.multicast_page', 'main.wifi_scan_page', 'main.converter_page'] %}
 <header>

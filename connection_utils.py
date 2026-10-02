@@ -153,7 +153,7 @@ def start_connection(protocol, host, port, username="", password="", baudrate="9
     if protocol not in {"tcp", "udp", "telnet", "ssh", "rs232"}:
         return False, "Select TCP, UDP, Telnet, SSH or RS232."
     if not host:
-        return False, "COM port is required." if protocol == "rs232" else "IP/host is required."
+        return False, "Serial port is required." if protocol == "rs232" else "IP/host is required."
     try:
         if protocol == "rs232":
             if serial is None:
