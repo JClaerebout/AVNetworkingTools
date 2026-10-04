@@ -386,9 +386,16 @@ def set_static(interface_name: str, ip: str, subnet: str, gateway: str, dns_serv
         "dns2": dns_servers[1] if len(dns_servers) > 1 else "",
     })
 
-    time.sleep(2.0)
-
+    # Windows may briefly report a newly configured address as Tentative while
+    # Duplicate Address Detection is still running. Poll that transient state
+    # instead of immediately showing an inconclusive conflict warning.
+    time.sleep(1.0)
     conflict_found, address_state = check_windows_ip_duplicate(interface_name, ip)
+    deadline = time.monotonic() + 9.0
+
+    while not conflict_found and address_state.lower() == "tentative" and time.monotonic() < deadline:
+        time.sleep(1.0)
+        conflict_found, address_state = check_windows_ip_duplicate(interface_name, ip)
 
     if conflict_found:
         return True, (
