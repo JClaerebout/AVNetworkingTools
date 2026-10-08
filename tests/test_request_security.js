@@ -21,7 +21,7 @@ class XHR {
 const requests=[],beacons=[];
 const context = {
     document:{querySelector:()=>({content:'synthetic-run-token'})},
-    location:{href:'http://127.0.0.1:49780/connection-test',origin:'http://127.0.0.1:49780'},
+    location:{href:'http://127.0.0.1:49781/connection-test',origin:'http://127.0.0.1:49781'},
     window:{fetch:(input,options)=>{requests.push({input,options}); return Promise.resolve({ok:true});}},
     navigator:{sendBeacon:(url,data)=>{beacons.push({url,data});return true;}},
     XMLHttpRequest:XHR, URL, Headers, FormData,

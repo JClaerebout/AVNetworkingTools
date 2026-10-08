@@ -4,7 +4,7 @@ A Windows desktop toolbox for AV commissioning: configure adapters, discover dev
 
 ## Quick start
 
-Download `AVNetworkingTools.exe` from the [latest release](https://github.com/JClaerebout/AVNetworkingTools/releases), place it in a convenient folder, and run it. Allow Windows administrator access when prompted; adapter changes and packet capture need it. The app opens a desktop window and serves its interface locally at `http://127.0.0.1:49780`. The packaged app does not require a Python installation.
+Download `AVNetworkingTools.exe` from the [latest release](https://github.com/JClaerebout/AVNetworkingTools/releases), place it in a convenient folder, and run it. Allow Windows administrator access when prompted; adapter changes and packet capture need it. The app opens a desktop window and serves its interface locally at `http://127.0.0.1:49781`. The packaged app does not require a Python installation.
 
 ## What it does
 

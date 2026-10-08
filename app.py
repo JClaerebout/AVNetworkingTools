@@ -37,7 +37,7 @@ def create_app() -> Flask:
 app = create_app()
 
 
-DEFAULT_PORT = 49780
+DEFAULT_PORT = 49781
 
 
 class PortInUseError(RuntimeError):
