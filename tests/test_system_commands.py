@@ -1,3 +1,4 @@
+from platform_backend import IS_MACOS
 import subprocess
 import unittest
 from unittest.mock import Mock, patch
@@ -23,7 +24,10 @@ class CommandDeadlineTests(unittest.TestCase):
     @patch("system_utils.subprocess.run")
     def test_windows_output_uses_oem_encoding(self, run):
         run.return_value = Mock(returncode=1, stdout="", stderr="Accès refusé")
-        with patch.object(system_utils.sys, "platform", "win32"):
+        with patch.object(system_utils.sys, "platform", "win32"), \
+             patch.object(subprocess, "STARTUPINFO", return_value=Mock(dwFlags=0), create=True), \
+             patch.object(subprocess, "STARTF_USESHOWWINDOW", 1, create=True), \
+             patch.object(subprocess, "CREATE_NO_WINDOW", 0x08000000, create=True):
             self.assertEqual(system_utils.run_cmd(["tool"])[2], "Accès refusé")
         self.assertEqual(run.call_args.kwargs["encoding"], "oem")
 
@@ -47,7 +51,7 @@ class WifiCommandTests(unittest.TestCase):
             wifi_utils._wifi_stop.set()
             raise RuntimeError("WLAN service unavailable")
         try:
-            with patch.object(wifi_utils, "_run_netsh", side_effect=fail_and_stop):
+            with patch.object(wifi_utils, "IS_MACOS", False), patch.object(wifi_utils, "_run_netsh", side_effect=fail_and_stop):
                 wifi_utils._scan_loop()
             self.assertIn("WLAN service unavailable", wifi_utils._wifi_message)
         finally:
@@ -77,6 +81,7 @@ Canal : 36
 
 class MetricCacheTests(unittest.TestCase):
     @patch("nic_utils.run_powershell", return_value=(0, '{"InterfaceIndex":12,"InterfaceMetric":25,"AutomaticMetric":1}', ""))
+    @unittest.skipIf(IS_MACOS, "Windows network configuration API; macOS covered by test_macos_backend")
     def test_cached_metrics_avoid_repeated_powershell_and_invalidate_after_change(self, run):
         with nic_utils._metrics_cache_lock:
             nic_utils._metrics_cache["until"] = 0

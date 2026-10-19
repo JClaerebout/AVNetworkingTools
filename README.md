@@ -6,6 +6,8 @@ A Windows and macOS desktop toolbox for AV commissioning: configure adapters, di
 
 On Windows, download `AVNetworkingTools.exe` from the [latest release](https://github.com/JClaerebout/AVNetworkingTools/releases), place it in a convenient folder, and run it. Allow Windows administrator access when prompted; adapter changes and packet capture need it. The app opens a desktop window and serves its interface locally on an automatically assigned free loopback port (`http://127.0.0.1:<port>`). Only one instance per user can run at a time; a second launch is rejected. The instance lock is automatically released when the process exits, including after a crash. The packaged app does not require a Python installation.
 
+On macOS arm64, download the matching DMG, open it, and copy the app to Applications. The current macOS package is ad-hoc signed and is not Apple notarized; macOS Gatekeeper may block it. Intel Mac packages are not included.
+
 ## What it does
 
 - Configure static IPv4, DHCP, DNS, and adapter priority; reuse saved settings.
@@ -35,15 +37,15 @@ Open **More > AV Network Health Check**, select the relevant adapter, and captur
 
 ## Practical limits
 
-- Scans accept IPv4 ranges of up to 1,024 usable hosts. On macOS, resolved neighbors from the selected interface’s ARP cache supplement ICMP replies, so counts can vary between scans as that cache changes. Reachable devices can appear without a MAC address.
+- Quick scans accept IPv4 ranges up to /16; complete scans are limited to 1,024 usable hosts. Off-subnet APIPA discovery uses direct ARP and requires Npcap on Windows or BPF access on macOS. On macOS, resolved neighbors from the selected interface’s ARP cache supplement ICMP replies, so counts can vary between scans as that cache changes. Reachable devices can appear without a MAC address.
 - **Restore previous** uses the primary IPv4 settings captured during the current app session. It does not restore secondary addresses or advanced routes.
-- Health Check describes traffic visible to the selected interface. It cannot see traffic withheld by the switch, VLAN tags, switch queues, or link-layer PTP. RTP loss and jitter are capture estimates. Npcap is not required.
+- Health Check describes traffic visible to the selected interface. It cannot see traffic withheld by the switch, VLAN tags, switch queues, or link-layer PTP. RTP loss and jitter are capture estimates. macOS capture requires BPF access.
 - Health findings are commissioning prompts. An inconclusive result means the capture was too short, empty, or failed; it does not confirm that the network is healthy.
 - Saved histories are stored in `%APPDATA%\AVNetworkingTools` on Windows or `~/Library/Application Support/AVNetworkingTools/` on macOS and keep backup copies.
 
 ## Updates and data
 
-The packaged app can check for GitHub releases. Windows can install a verified EXE update; macOS opens a verified DMG for manual installation. Saved histories, presets, scripts, and the local manufacturer database live in the platform application data folder. Export actions use a Windows Save As dialog, so cancelling an export leaves the destination untouched.
+The packaged app can check for GitHub releases. Windows can install a verified EXE update; macOS opens a verified DMG for manual installation. Saved histories, presets, scripts, and the local manufacturer database live in the platform application data folder. Export actions use a native Save As dialog, so cancelling an export leaves the destination untouched.
 
 ## Run from source
 

@@ -1,3 +1,4 @@
+from platform_backend import IS_MACOS
 import tempfile
 import unittest
 from pathlib import Path
@@ -64,6 +65,7 @@ class HelperTests(unittest.TestCase):
         self.assertEqual(sorted_names, ["A Adapter", "B Adapter", "Z Adapter"])
 
     @patch("nic_utils.is_interface_connected", return_value=False)
+    @unittest.skipIf(IS_MACOS, "Windows network configuration API; macOS covered by test_macos_backend")
     def test_release_renew_refuse_disconnected_adapters(self, _mock_connected):
         success, message = release_dhcp("Ethernet")
         self.assertFalse(success)

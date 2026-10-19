@@ -426,6 +426,7 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(result[0]["code"],"profile_dscp")
         self.assertEqual(result[0]["severity"],"warning")
 
+    @patch.object(capture, "IS_MACOS", False)
     def test_membership_empty_success_and_failure(self):
         with patch.object(capture,"run_cmd",return_value=(0,"Interface 7: Ethernet", "")):
             self.assertEqual(capture._read_joined_groups(7),set())
@@ -455,12 +456,14 @@ class IntegrationTests(unittest.TestCase):
         sock.recvfrom.assert_not_called()
         self.assertFalse(capture._state["running"])
 
+    @patch.object(capture, "IS_MACOS", False)
     def test_permission_failure_and_cleanup(self):
         with patch.object(capture,"_open_raw_capture",side_effect=PermissionError):
             capture._capture("10.0.0.5")
         self.assertFalse(capture._state["running"])
         self.assertIn("administrator",capture._state["error"])
 
+    @patch.object(capture, "IS_MACOS", False)
     def test_socket_setup_failure_closes_partial_socket(self):
         sock = Mock()
         sock.bind.side_effect = OSError("bad interface")

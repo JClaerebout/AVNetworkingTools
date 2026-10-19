@@ -1,3 +1,4 @@
+from platform_backend import IS_MACOS
 import copy
 import threading
 import unittest
@@ -262,6 +263,7 @@ class NetworkSettingsTests(unittest.TestCase):
             for args in values: self.assertFalse(nic.set_static("Offline",*args)[0])
         run.assert_not_called()
 
+    @unittest.skipIf(IS_MACOS, "Windows network configuration API; macOS covered by test_macos_backend")
     def test_verification_unavailable_not_reported_as_clean(self):
         with patch.object(nic,"is_interface_connected",return_value=True),patch.object(nic,"_remember_config"),patch.object(nic,"run_cmd",return_value=(0,"","")),patch.object(nic,"run_powershell",return_value=(1,"","failure")),patch.object(nic,"save_history_entry"),patch.object(nic.time,"sleep"):
             success,message=nic.set_static("Offline","192.0.2.10","255.255.255.0","",[])
@@ -273,6 +275,7 @@ class NetworkSettingsTests(unittest.TestCase):
             nic.check_windows_ip_duplicate("Room's $Adapter", "192.0.2.10")
         self.assertIn("'Room''s $Adapter'",run.call_args.args[0])
 
+    @unittest.skipIf(IS_MACOS, "Windows network configuration API; macOS covered by test_macos_backend")
     def test_restore_uses_original_dhcp_or_static_settings(self):
         with patch.dict(nic._previous_configs,{"Offline":{"dhcp_raw":"Enabled"}}),patch.object(nic,"set_dhcp",return_value=(True,"Restored")) as restore:
             self.assertTrue(nic.restore_previous_config("Offline")[0]);restore.assert_called_once_with("Offline")

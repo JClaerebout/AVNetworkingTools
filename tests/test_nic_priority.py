@@ -1,3 +1,4 @@
+from platform_backend import IS_MACOS
 from http_test_support import authorized_client
 import unittest
 from unittest.mock import patch
@@ -14,6 +15,7 @@ class NicPriorityTests(unittest.TestCase):
         run.assert_not_called()
 
     @patch('nic_utils.run_powershell', return_value=(0, '', ''))
+    @unittest.skipIf(IS_MACOS, "Windows network configuration API; macOS covered by test_macos_backend")
     def test_manual_and_automatic_metric(self, run):
         self.assertTrue(set_interface_metric('12', '25')[0])
         self.assertIn('-InterfaceIndex 12 -AddressFamily IPv4 -AutomaticMetric Disabled -InterfaceMetric 25', run.call_args.args[0])
@@ -22,6 +24,7 @@ class NicPriorityTests(unittest.TestCase):
         self.assertNotIn('-InterfaceMetric', run.call_args.args[0])
 
     @patch('nic_utils.run_powershell', return_value=(1, '', 'Access denied'))
+    @unittest.skipIf(IS_MACOS, "Windows network configuration API; macOS covered by test_macos_backend")
     def test_command_failure_is_reported(self, run):
         self.assertEqual(set_interface_metric('12', '25'), (False, 'Access denied'))
         self.assertEqual(get_interface_metrics(), {})

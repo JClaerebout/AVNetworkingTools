@@ -17,6 +17,7 @@ class UpdateTests(unittest.TestCase):
     @patch("update_utils.APP_VERSION", "1.2.0")
     @patch("update_utils.sys.frozen", True, create=True)
     @patch("update_utils._read_json")
+    @patch.object(update_utils, "IS_MACOS", False)
     def test_check_for_update_selects_release_exe(self, read_json):
         read_json.return_value = {
             "tag_name": "V1.3.0",
@@ -46,6 +47,7 @@ class UpdateTests(unittest.TestCase):
         self.assertTrue(result["available"])
         self.assertIn("error", result)
 
+    @patch.object(update_utils, "IS_MACOS", False)
     def test_install_helper_waits_for_launcher_and_records_target(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
