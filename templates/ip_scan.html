@@ -31,7 +31,7 @@
         </div>
         <div>
             <label>Custom subnet optional</label>
-            <input id="customSubnet" placeholder="Example: 10.68.130.0/24">
+            <input id="customSubnet" placeholder="Example: 169.254.0.0/16">
             <div class="desc">Leave empty to scan the selected NIC subnet.</div>
         </div>
         <div>
@@ -47,10 +47,10 @@
 
         <label class="auto-refresh-box">
             <input id="quickScan" type="checkbox">
-            Quick scan: IP + MAC only
+            Quick scan: IP + MAC + manufacturer
         </label>
 
-        <span class="desc">Large subnets are limited to 1024 hosts.</span>
+        <span class="desc">Up to /16 in Quick scan only. For APIPA devices, enter 169.254.0.0/16.</span>
     </div>
 </div>
 

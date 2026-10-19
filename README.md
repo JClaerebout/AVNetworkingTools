@@ -4,7 +4,7 @@ A Windows and macOS desktop toolbox for AV commissioning: configure adapters, di
 
 ## Quick start
 
-On Windows, download `AVNetworkingTools.exe` from the [latest release](https://github.com/JClaerebout/AVNetworkingTools/releases), place it in a convenient folder, and run it. Allow Windows administrator access when prompted; adapter changes and packet capture need it. The app opens a desktop window and serves its interface locally at `http://127.0.0.1:49780`. The packaged app does not require a Python installation.
+On Windows, download `AVNetworkingTools.exe` from the [latest release](https://github.com/JClaerebout/AVNetworkingTools/releases), place it in a convenient folder, and run it. Allow Windows administrator access when prompted; adapter changes and packet capture need it. The app opens a desktop window and serves its interface locally on an automatically assigned free loopback port (`http://127.0.0.1:<port>`). Only one instance per user can run at a time; a second launch is rejected. The instance lock is automatically released when the process exits, including after a crash. The packaged app does not require a Python installation.
 
 ## What it does
 
@@ -61,3 +61,5 @@ Run all Windows checks with `check.bat`. Build the Windows executable with `buil
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+Workspace drafts and the latest IP/WiFi scan results, Connect/Ping logs, and Script output are saved in the application data folder and restored after desktop restart. Tool results are checkpointed every five seconds and on normal exit. Fields, Connect send rows, and Script blocks are saved as you edit. Password fields are excluded. Restored tasks stay stopped; reconnect or run them explicitly. Live NIC settings continue to come from the operating system.

@@ -535,7 +535,7 @@ def ip_scan_export():
         visible_results = data.get("results")
         if not isinstance(visible_results, list) or not all(isinstance(item, dict) for item in visible_results):
             return jsonify({"success": False, "message": "Invalid visible scan results."}), 400
-        if len(visible_results) > 1024:
+        if len(visible_results) > 65534:
             return jsonify({"success": False, "message": "Too many scan results to export."}), 400
         results = visible_results
     else:
@@ -794,3 +794,20 @@ def connection_test_history_save():
         "success": success,
         "message": message
     })
+
+
+@main_bp.post("/api/workspace/draft")
+def save_workspace_draft():
+    from workspace_state import save_draft
+    if request.content_length and request.content_length > 2 * 1024 * 1024:
+        return jsonify(success=False, message="Draft too large."), 413
+    data = _json_object()
+    if data is None:
+        return _bad_json()
+    try:
+        save_draft(data.get("key"), data.get("value"))
+    except (ValueError, TypeError):
+        return jsonify(success=False, message="Invalid draft."), 400
+    except OSError:
+        return jsonify(success=False, message="Could not save workspace."), 500
+    return jsonify(success=True)

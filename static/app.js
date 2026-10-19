@@ -36,7 +36,7 @@
         if (!persist) return;
 
         try {
-            localStorage.setItem('avNetworkingTools:theme', preference);
+            (window.workspaceStorage || localStorage).setItem('avNetworkingTools:theme', preference);
         } catch (_error) {
             // The preference still works for this page when browser storage is unavailable.
         }
@@ -136,26 +136,26 @@
         });
 })();
 
-// Keep unfinished field values when navigating between tool pages in this tab.
+// Keep unfinished field values across tool pages and desktop restarts.
 (function preservePageFields() {
     const storageKey = `avNetworkingTools:page-fields:${window.location.pathname}`;
     const fieldSelector = 'input:not([type="password"]):not([data-sensitive]):not([type="hidden"]):not([type="file"]):not([type="button"]):not([type="submit"]), select:not([data-sensitive]):not([data-no-draft]), textarea:not([data-sensitive])';
     // Remove password entries left by older versions, including drafts from other pages.
     try {
-        for (let i = 0; i < sessionStorage.length; i++) {
-            const key = sessionStorage.key(i);
+        for (let i = 0; i < (window.workspaceStorage || sessionStorage).length; i++) {
+            const key = (window.workspaceStorage || sessionStorage).key(i);
             if (!key.startsWith('avNetworkingTools:page-fields:')) continue;
-            const fields = JSON.parse(sessionStorage.getItem(key) || '{}');
+            const fields = JSON.parse((window.workspaceStorage || sessionStorage).getItem(key) || '{}');
             for (const name of Object.keys(fields)) {
                 if (/password|secret|token/i.test(name)) delete fields[name];
             }
-            sessionStorage.setItem(key, JSON.stringify(fields));
+            (window.workspaceStorage || sessionStorage).setItem(key, JSON.stringify(fields));
         }
     } catch (_error) { /* Storage may be unavailable. Never restore password controls. */ }
     let savedFields = {};
 
     try {
-        savedFields = JSON.parse(sessionStorage.getItem(storageKey) || '{}');
+        savedFields = JSON.parse((window.workspaceStorage || sessionStorage).getItem(storageKey) || '{}');
     } catch (_error) {
         savedFields = {};
     }
@@ -214,7 +214,7 @@
         });
 
         try {
-            sessionStorage.setItem(storageKey, JSON.stringify(state));
+            (window.workspaceStorage || sessionStorage).setItem(storageKey, JSON.stringify(state));
             savedFields = state;
         } catch (_error) {
             // The page remains usable when browser storage is unavailable.
@@ -507,10 +507,10 @@ function startNicRefreshBurst() {
 
 const autoRefresh = document.getElementById('autoRefresh');
 if (autoRefresh) {
-    try { autoRefresh.checked = localStorage.getItem('autoRefreshEnabled') !== 'false'; }
+    try { autoRefresh.checked = (window.workspaceStorage || localStorage).getItem('autoRefreshEnabled') !== 'false'; }
     catch (_) { autoRefresh.checked = true; }
     autoRefresh.addEventListener('change', () => {
-        try { localStorage.setItem('autoRefreshEnabled', String(autoRefresh.checked)); } catch (_) {}
+        try { (window.workspaceStorage || localStorage).setItem('autoRefreshEnabled', String(autoRefresh.checked)); } catch (_) {}
     });
     setInterval(() => {
         if (autoRefresh.checked && nicBurstRemaining === 0) refreshNicStatus();

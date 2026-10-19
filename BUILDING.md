@@ -12,6 +12,10 @@ The macOS build is native arm64 or x86_64. `AVNETWORKINGTOOLS_TARGET_ARCH=univer
 
 A DMG can be made locally with `hdiutil create -volname AVNetworkingTools -srcfolder dist/AVNetworkingTools.app -ov -format UDZO dist/AVNetworkingTools-macOS-arm64.dmg` (change the architecture name for an Intel build). The app's updater checks GitHub Releases and opens a verified DMG for manual installation. It does not replace a running `.app`.
 
+## Development builds
+
+Use the fourth component in `version.py` for test builds: `2.0.0.1`, `2.0.0.2`, and so on. The app shows the full version on both platforms. The macOS spec reads that file and uses release version `2.0.0` with development bundle version `2.0.0d1` for the first test build. Keep development build numbers between 1 and 255 for that bundle format. Give test artifacts versioned filenames so they remain distinct from release packages.
+
 ## Public release preparation
 
 Build Windows and each macOS architecture from the same versioned source, then attach the Windows EXE and Mac DMG assets to one release. No release workflow exists in this repository yet; create and validate one separately before publishing. The Windows updater accepts `AVNetworkingTools.exe` or `AVNetworkingTools-Windows-x64.exe`; macOS accepts `AVNetworkingTools-macOS-universal.dmg` or the matching `arm64`/`x64` DMG. Include GitHub SHA-256 asset digests for the updater.

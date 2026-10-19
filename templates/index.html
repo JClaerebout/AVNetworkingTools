@@ -94,7 +94,7 @@
                 <div class="row static-fields">
                     <div>
                         <label>IP address</label>
-                        <input name="ip" data-ip-suggestions value="{{ nic.ip }}" placeholder="192.168.1.50">
+                        <input name="ip" value="{{ nic.ip }}" placeholder="192.168.1.50">
                     </div>
                     <div>
                         <label>Subnet mask</label>
@@ -105,11 +105,11 @@
                 <div class="row static-fields">
                     <div>
                         <label>Gateway</label>
-                        <input name="gateway" data-ip-suggestions value="{{ nic.gateway }}" placeholder="192.168.1.1">
+                        <input name="gateway" value="{{ nic.gateway }}" placeholder="192.168.1.1">
                     </div>
                     <div>
                         <label>DNS servers</label>
-                        <input name="dns" data-ip-suggestions value="{{ nic.dns | join(', ') }}" placeholder="1.1.1.1, 8.8.8.8">
+                        <input name="dns" value="{{ nic.dns | join(', ') }}" placeholder="1.1.1.1, 8.8.8.8">
                     </div>
                 </div>
 

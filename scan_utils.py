@@ -6,7 +6,7 @@ import sys
 import threading
 import time
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, wait, FIRST_COMPLETED
 from datetime import datetime
 from typing import Dict, List, Optional
 
@@ -15,7 +15,8 @@ from nic_utils import get_nics, subnet_to_prefix
 from manufacturer_db import lookup_local_manufacturer
 from system_utils import run_cmd
 
-_MAX_HOSTS = 1024
+_MAX_HOSTS = 65534
+_DETAIL_HOST_LIMIT = 1024
 _SCAN_PING_RETRIES = 2
 _MONITOR_MISSING_AFTER = 3
 _WEB_PORT_TIMEOUT = 0.4
@@ -668,6 +669,8 @@ def _monitor_update_device(ip: str, mac: str, quick_scan: bool) -> bool:
                 result["duplicate_macs"] = sorted({m for e in recent for m in (e["previous"], e["current"])}) if suspected else []
                 if mac:
                     result["mac"] = mac
+                    if mac != previous_mac and not result.get("is_local"):
+                        result["manufacturer"] = lookup_manufacturer(mac, allow_online=False)
                 result["seen_macs"] = sorted({m for e in result["mac_history"] for m in (e["previous"], e["current"])} | ({mac or previous_mac} if mac or previous_mac else set()))
                 if was_duplicate and not suspected:
                     _append_monitor_log_locked(f"CONFLICT OBSERVATION CLEARED {ip}: no recent repeated MAC changes")
@@ -684,7 +687,7 @@ def _monitor_update_device(ip: str, mac: str, quick_scan: bool) -> bool:
         _scan_results.append({
             "ip": ip,
             "mac": mac,
-            "manufacturer": "-" if quick_scan else "Looking up...",
+            "manufacturer": lookup_manufacturer(mac, allow_online=False),
             "hostname": "-" if quick_scan else "Looking up...",
             "missing": False,
             "miss_count": 0,
@@ -838,6 +841,9 @@ def start_monitor() -> tuple[bool, str]:
         if _scan_running or _lookup_running:
             return False, "Wait until the scan and lookup are complete."
 
+        if _large_scan_quick_only:
+            return False, "Monitoring is disabled for subnets larger than 1024 hosts."
+
         if not _scan_results:
             return False, "Run an IP scan first."
 
@@ -934,10 +940,11 @@ def _add_result(item: Dict) -> None:
         for result in _scan_results:
             if result["ip"] == item["ip"]:
                 # A ping may discover a host before its ARP entry is ready.
-                # Keep its lookup state while filling in the later MAC.
+                # Fill in the manufacturer as soon as the MAC becomes available.
                 if item.get("mac") and not result.get("mac"):
                     result["mac"] = item["mac"]
                     result["seen_macs"] = [item["mac"]]
+                    result["manufacturer"] = lookup_manufacturer(item["mac"], allow_online=False)
                 return
         _scan_results.append(item)
         _scan_results.sort(key=lambda x: ipaddress.ip_address(x["ip"]))
@@ -970,7 +977,7 @@ def _lookup_worker(reused_quick_scan: bool = False) -> None:
         _lookup_running = bool(items)
         if items:
             prefix = "Quick scan reused." if reused_quick_scan else "Scan complete."
-            _scan_message = f"{prefix} Loading local manufacturers for {len(items)} device(s)..."
+            _scan_message = f"{prefix} Looking up hostnames and web ports for {len(items)} device(s)..."
 
     if not items:
         with _scan_lock:
@@ -981,16 +988,6 @@ def _lookup_worker(reused_quick_scan: bool = False) -> None:
             else:
                 _scan_message = f"Lookup complete. Found {len(_scan_results)} device(s)."
         return
-
-    # Local database lookups complete before any potentially slow hostname work.
-    for item in items:
-        if item.get("is_local"):
-            continue
-        manufacturer = lookup_manufacturer(item.get("mac", ""), allow_online=False)
-        _update_result(item.get("ip", ""), {"manufacturer": manufacturer})
-
-    with _scan_lock:
-        _scan_message = f"Local manufacturers loaded. Looking up hostnames and web ports for {len(items)} device(s)..."
 
     mdns_names = _discover_mdns_names(source_ip)
 
@@ -1052,13 +1049,15 @@ def _lookup_worker(reused_quick_scan: bool = False) -> None:
             else:
                 _scan_message = f"Lookup complete. Found {len(_scan_results)} device(s)."
 
-def _validated_network(value):
+def _validated_network(value, quick_scan=False):
     network = ipaddress.ip_network(value, strict=False)
     if network.version != 4:
         raise ValueError("Only IPv4 scan ranges are supported.")
     host_count = network.num_addresses if network.prefixlen >= 31 else network.num_addresses - 2
     if host_count > _MAX_HOSTS:
         raise ValueError(f"Subnet contains {host_count} hosts; choose a range with at most {_MAX_HOSTS} hosts.")
+    if host_count > _DETAIL_HOST_LIMIT and not quick_scan:
+        raise ValueError("Choose Quick scan for subnets larger than 1024 hosts (up to /16).")
     return network
 
 
@@ -1092,13 +1091,13 @@ def _scan_worker_impl(interface_name: str, custom_subnet: str = "", quick_scan: 
 
     if custom_subnet:
         try:
-            network = _validated_network(custom_subnet)
+            network = _validated_network(custom_subnet, quick_scan)
         except ValueError as exc:
             with _scan_lock:
                 _scan_message = str(exc)
             return
     else:
-        network = _validated_network(nic["network"])
+        network = _validated_network(nic["network"], quick_scan)
 
     hosts = [str(host) for host in network.hosts()]
     local_network = ipaddress.ip_network(nic["network"], strict=False)
@@ -1114,10 +1113,10 @@ def _scan_worker_impl(interface_name: str, custom_subnet: str = "", quick_scan: 
         _last_scan_context["completed"] = False
 
     with _scan_lock:
-        _large_scan_quick_only = False
+        _large_scan_quick_only = len(hosts) > _DETAIL_HOST_LIMIT
 
     with _scan_lock:
-        _scan_total = len(scan_targets)
+        _scan_total = len(scan_targets) * (2 if network.subnet_of(ipaddress.ip_network("169.254.0.0/16")) else 1)
         _scan_done = 0
         _scan_message = f"Scanning {network}..."
     
@@ -1138,53 +1137,72 @@ def _scan_worker_impl(interface_name: str, custom_subnet: str = "", quick_scan: 
 
     workers = min(100, max(8, len(scan_targets)))
 
-    with ThreadPoolExecutor(max_workers=workers) as executor:
-        futures = {
-            executor.submit(
-                _discover_host,
-                source_ip,
-                ip,
-                ipaddress.ip_address(ip) in local_network,
-                _SCAN_PING_RETRIES,
-                _scan_stop,
-                nic.get("device", ""),
-            ): ip
-            for ip in scan_targets
+    def progress():
+        global _scan_done
+        with _scan_lock:
+            _scan_done += 1
+
+    discovered = set()
+
+    def found(ip, mac):
+        if ip in discovered:
+            return
+        discovered.add(ip)
+        item = {
+            "ip": ip,
+            "mac": mac,
+            "manufacturer": lookup_manufacturer(mac, allow_online=False),
+            "hostname": "-" if quick_scan else "Looking up...",
+            "missing": False,
+            "miss_count": 0,
+            "duplicate_ip": False,
+            "duplicate_macs": [],
+            "seen_macs": [mac] if mac else [],
+            "web_services": [],
         }
-
-        for future in as_completed(futures):
-            if _scan_stop.is_set():
-                for pending in futures:
-                    pending.cancel()
-                break
-
-            ip = futures[future]
-            alive = False
-            mac = ""
-
-            try:
-                alive, mac = future.result()
-            except Exception:
-                alive = False
-
+        if _large_scan_quick_only:
             with _scan_lock:
-                _scan_done += 1
+                _scan_results.append(item)
+        else:
+            _add_result(item)
 
-            if alive:
-                _add_result({
-                    "ip": ip,
-                    "mac": mac,
-                    "manufacturer": "-" if quick_scan else "Looking up...",
-                    "hostname": "-" if quick_scan else "Looking up...",
-                    "missing": False,
-                    "miss_count": 0,
-                    "duplicate_ip": False,
-                    "duplicate_macs": [],
-                    "seen_macs": [mac] if mac else [],
-                    "web_services": [],
-                })
+    apipa = network.subnet_of(ipaddress.ip_network("169.254.0.0/16"))
+    if apipa:
+        from arp_scan import sweep
+        sweep(nic, network, _scan_stop, progress, found)
+    else:
+        # Keep at most one future per worker instead of queuing the whole subnet.
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            targets = iter(scan_targets)
+            futures = {}
+            def submit_next():
+                if _scan_stop.is_set():
+                    return
+                ip = next(targets, None)
+                if ip is not None:
+                    futures[executor.submit(
+                        _discover_host, source_ip, ip,
+                        ipaddress.ip_address(ip) in local_network,
+                        _SCAN_PING_RETRIES, _scan_stop, nic.get("device", ""),
+                    )] = ip
+            for _ in range(workers):
+                submit_next()
+            while futures and not _scan_stop.is_set():
+                ready, _ = wait(futures, timeout=0.1, return_when=FIRST_COMPLETED)
+                for future in ready:
+                    ip = futures.pop(future)
+                    try:
+                        alive, mac = future.result()
+                    except Exception:
+                        alive, mac = False, ""
+                    progress()
+                    if alive:
+                        found(ip, mac)
+                    submit_next()
+            for future in futures:
+                future.cancel()
 
-    if sys.platform == "darwin" and not _scan_stop.is_set():
+    if sys.platform == "darwin" and not apipa and not _large_scan_quick_only and not _scan_stop.is_set():
         # ICMP-silent hosts still answer link-layer resolution during the sweep.
         # Limit cached neighbors to this interface and the scanned on-link range.
         neighbors = _macos_arp_entries(nic.get("device", ""))
@@ -1206,7 +1224,7 @@ def _scan_worker_impl(interface_name: str, custom_subnet: str = "", quick_scan: 
                     mac = neighbors.get(ip, "")
                     _add_result({
                         "ip": ip, "mac": mac,
-                        "manufacturer": "-" if quick_scan else "Looking up...",
+                        "manufacturer": lookup_manufacturer(mac, allow_online=False),
                         "hostname": "-" if quick_scan else "Looking up...",
                         "missing": False, "miss_count": 0,
                         "duplicate_ip": False, "duplicate_macs": [],
@@ -1217,7 +1235,7 @@ def _scan_worker_impl(interface_name: str, custom_subnet: str = "", quick_scan: 
                 continue
             _add_result({
                 "ip": ip, "mac": mac,
-                "manufacturer": "-" if quick_scan else "Looking up...",
+                "manufacturer": lookup_manufacturer(mac, allow_online=False),
                 "hostname": "-" if quick_scan else "Looking up...",
                 "missing": False, "miss_count": 0,
                 "duplicate_ip": False, "duplicate_macs": [],
@@ -1253,7 +1271,7 @@ def start_scan(interface_name: str, custom_subnet: str = "", quick_scan: bool = 
         return False, "Select a NIC first."
     if custom_subnet:
         try:
-            _validated_network(custom_subnet)
+            _validated_network(custom_subnet, quick_scan)
         except ValueError as exc:
             return False, str(exc)
 
@@ -1317,11 +1335,10 @@ def start_lookup() -> tuple[bool, str]:
 
         for result in _scan_results:
             if not result.get("is_local"):
-                result["manufacturer"] = "Looking up..."
                 result["hostname"] = "Looking up..."
 
         _lookup_running = True
-        _scan_message = "Quick scan reused. Starting local manufacturer and hostname lookup..."
+        _scan_message = "Quick scan reused. Starting hostname and web port lookup..."
 
     _lookup_thread = threading.Thread(
         target=_lookup_worker,
@@ -1374,7 +1391,7 @@ def get_scan_status() -> Dict:
             "done": _scan_done,
             "lookup_total": _lookup_total,
             "lookup_done": _lookup_done,
-            "results": list(_scan_results),
+            "results": sorted(_scan_results, key=lambda item: ipaddress.ip_address(item["ip"])),
         }
 
 

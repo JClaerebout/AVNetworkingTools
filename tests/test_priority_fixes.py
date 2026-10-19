@@ -82,7 +82,7 @@ class ScanFixTests(unittest.TestCase):
 
     def test_oversize_and_ipv6_rejected_before_enumeration(self):
         with patch.object(scan.ipaddress.IPv4Network,"hosts",side_effect=AssertionError("Must not enumerate")), patch.object(scan,"_discover_host") as discover:
-            for network in ("10.0.0.0/21","10.0.0.0/8","::/0"):
+            for network in ("10.0.0.0/15","10.0.0.0/8","::/0"):
                 self.assertFalse(scan.start_scan("Offline",network,True)[0])
             discover.assert_not_called()
 
@@ -90,7 +90,7 @@ class ScanFixTests(unittest.TestCase):
         with patch.object(scan,"_find_nic",return_value=(True,self.nic)), patch.object(scan,"_discover_host") as discover:
             scan._scan_worker("Offline")
         self.assertFalse(scan._scan_running)
-        self.assertIn("at most 1024",scan._scan_message)
+        self.assertIn("Choose Quick scan",scan._scan_message)
         discover.assert_not_called()
 
     def test_interface_failure_always_resets_state(self):

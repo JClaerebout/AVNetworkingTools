@@ -168,7 +168,7 @@
             const safeBlocks = collectBlocks().map(block => (
                 block.type === "target" ? {...block, password: ""} : block
             ));
-            localStorage.setItem(storageKey, JSON.stringify(safeBlocks));
+            (window.workspaceStorage || localStorage).setItem(storageKey, JSON.stringify(safeBlocks));
         } catch (_error) {
             // The canvas remains usable when browser storage is unavailable.
         }
@@ -176,8 +176,8 @@
 
     function loadDraft() {
         try {
-            const blocks = JSON.parse(localStorage.getItem(storageKey) || "null");
-            if (Array.isArray(blocks) && blocks.length) {
+            const blocks = JSON.parse((window.workspaceStorage || localStorage).getItem(storageKey) || "null");
+            if (Array.isArray(blocks)) {
                 blocks.filter(block => ["target", "command", "delay"].includes(block.type))
                     .forEach(block => addBlock(block.type, block, false));
                 return;

@@ -199,6 +199,7 @@ def get_nics() -> List[Dict]:
             "name": name,
             "description": adapter.Description or "",
             "if_index": adapter.InterfaceIndex,
+            "guid": adapter.GUID or "",
             **metrics.get(int(adapter.InterfaceIndex), {}),
             "mac": adapter.MACAddress or "",
             "link_status": "Up" if connected else "Disconnected",

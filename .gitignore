@@ -37,3 +37,14 @@ desktop.ini
 todo.txt
 CHANGELOG.md
 APP_REVIEW.md
+
+# Desktop instance lock
+desktop.lock
+
+workspace_state.json*
+
+# Local assistant instructions and workstation notes
+AGENTS.md
+BUILDING.local.md
+.agents/
+.codex/

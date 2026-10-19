@@ -8,6 +8,14 @@ import app_lifecycle
 
 
 class StartupTests(unittest.TestCase):
+    def test_second_instance_does_not_start_server_or_window(self):
+        with app.desktop_instance(app.BASE_DIR / "desktop.lock"):
+            with patch.object(app, "create_desktop_server") as server, patch.object(app.webview, "create_window") as window:
+                with self.assertRaises(app.AlreadyRunningError):
+                    app.run_desktop()
+                server.assert_not_called()
+                window.assert_not_called()
+
     def test_health_identifies_exact_app_instance(self):
         first, second = app.create_app(), app.create_app()
         self.assertNotEqual(first.config["INSTANCE_ID"], second.config["INSTANCE_ID"])
@@ -17,11 +25,11 @@ class StartupTests(unittest.TestCase):
         thread = Mock(is_alive=Mock(return_value=True))
         response = io.BytesIO(json.dumps({"instance_id": "other"}).encode())
         with patch.object(app.urllib.request, "urlopen", return_value=response), patch.object(app.time, "sleep"), patch.object(app.time, "monotonic", side_effect=[0, 1, 2]):
-            self.assertFalse(app.wait_for_flask("ours", thread, timeout=1))
+            self.assertFalse(app.wait_for_flask("ours", thread, port=54321, timeout=1))
 
     def test_busy_port_does_not_open_window(self):
         with patch.object(app, "create_desktop_server", side_effect=OSError("busy")), patch.object(app.webview, "create_window") as window:
-            with self.assertRaisesRegex(RuntimeError, "already running"):
+            with self.assertRaises(OSError):
                 app.run_desktop()
             window.assert_not_called()
 
@@ -33,10 +41,24 @@ class StartupTests(unittest.TestCase):
         finally:
             first.close()
 
+    def test_default_servers_get_distinct_reserved_ports(self):
+        first = app.create_desktop_server()
+        try:
+            second = app.create_desktop_server()
+            try:
+                self.assertGreater(int(first.effective_port), 0)
+                self.assertNotEqual(first.effective_port, second.effective_port)
+            finally:
+                second.close()
+        finally:
+            first.close()
+
     def test_window_close_stops_tasks_and_server(self):
-        server = Mock()
-        with patch.object(app, "create_desktop_server", return_value=server), patch.object(app, "wait_for_flask", return_value=True), patch.object(app, "stop_background_tasks") as stop, patch.object(app, "start_manufacturer_database_update"), patch.object(app.webview, "create_window"), patch.object(app.webview, "start"):
+        server = Mock(effective_port="54321")
+        with patch.object(app, "create_desktop_server", return_value=server), patch.object(app, "wait_for_flask", return_value=True) as ready, patch.object(app, "stop_background_tasks") as stop, patch.object(app, "start_manufacturer_database_update"), patch.object(app.webview, "create_window") as window, patch.object(app.webview, "start"):
             app.run_desktop()
+        ready.assert_called_once_with(app.app.config["INSTANCE_ID"], unittest.mock.ANY, port=54321)
+        self.assertEqual(window.call_args.args[1], "http://127.0.0.1:54321")
         stop.assert_called_once()
         server.close.assert_called_once()
 

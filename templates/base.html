@@ -5,12 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="action-token" content="{{ action_token }}">
     <script src="{{ url_for('static', filename='request_security.js') }}"></script>
+    <script id="workspaceDrafts" type="application/json">{{ workspace_drafts | tojson }}</script>
+    <script src="{{ url_for('static', filename='workspace_state.js') }}"></script>
     <title>{% block title %}AVNetworkingTools{% endblock %}</title>
     <script>
         (function applySavedThemePreference() {
             let preference = 'auto';
             try {
-                const savedPreference = localStorage.getItem('avNetworkingTools:theme');
+                const savedPreference = (window.workspaceStorage || localStorage).getItem('avNetworkingTools:theme');
                 if (['dark', 'light', 'auto'].includes(savedPreference)) preference = savedPreference;
             } catch (_error) {
                 // Auto remains the default when browser storage is unavailable.
@@ -109,6 +111,7 @@
     src="{{ url_for('static', filename='app.js') }}?v=connection-suggestions-1"
     data-ip-scan-status-url="{{ url_for('main.ip_scan_status') }}"
 ></script>
+<script src="{{ url_for('static', filename='enter_shortcuts.js') }}?v=2"></script>
 <script src="{{ url_for('static', filename='updater.js') }}?v=1"></script>
 <script src="{{ url_for('static', filename='status_requests.js') }}?v=1"></script>
 <script src="{{ url_for('static', filename='activity.js') }}?v=1" data-activity-url="{{ url_for('main.active_tasks') }}"></script>

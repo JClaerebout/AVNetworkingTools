@@ -129,7 +129,7 @@
                 name: row.querySelector(".send-name-input").value
             }));
         try {
-            sessionStorage.setItem(sendRowsStorageKey, JSON.stringify(values));
+            (window.workspaceStorage || sessionStorage).setItem(sendRowsStorageKey, JSON.stringify(values));
         } catch (_error) {
             // The connection page remains usable when browser storage is unavailable.
         }
@@ -137,7 +137,7 @@
 
     function loadSendRowsState() {
         try {
-            const values = JSON.parse(sessionStorage.getItem(sendRowsStorageKey) || "null");
+            const values = JSON.parse((window.workspaceStorage || sessionStorage).getItem(sendRowsStorageKey) || "null");
             if (!Array.isArray(values) || !values.length) return null;
 
             return values.map(value => typeof value === "string"
@@ -322,9 +322,6 @@
         });
         input.addEventListener("input", saveSendRowsState);
         nameInput.addEventListener("input", saveSendRowsState);
-        input.addEventListener("keydown", event => {
-            if (event.key === "Enter") sendValue(input);
-        });
     }
 
     function updateRemoveButtons() {

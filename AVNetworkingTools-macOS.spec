@@ -1,5 +1,13 @@
 # -*- mode: python ; coding: utf-8 -*-
 import os
+from pathlib import Path
+
+version_info = {}
+exec((Path(SPECPATH) / "version.py").read_text(), version_info)
+app_version = version_info["APP_VERSION"]
+version_parts = app_version.split(".")
+release_version = ".".join(version_parts[:3])
+bundle_version = release_version + ("d" + version_parts[3] if len(version_parts) == 4 else "")
 
 # Build natively for arm64 or x86_64. A universal2 build is allowed only when
 # every collected native dependency contains both slices.
@@ -30,6 +38,6 @@ coll = COLLECT(exe, a.binaries, a.datas, strip=False,
 app = BUNDLE(coll, name='AVNetworkingTools.app',
              icon='AVNetworkingTools.icns',
              bundle_identifier='com.jclaerebout.AVNetworkingTools',
-             info_plist={'CFBundleShortVersionString': '2.0.0',
-                         'CFBundleVersion': '2.0.0',
+             info_plist={'CFBundleShortVersionString': release_version,
+                         'CFBundleVersion': bundle_version,
                          'NSLocationWhenInUseUsageDescription': 'Wi-Fi network details require Location Services.'})

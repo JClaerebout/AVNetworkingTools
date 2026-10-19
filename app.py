@@ -9,7 +9,7 @@ import urllib.request
 from flask import Flask, jsonify
 from waitress import create_server
 
-from config import SECRET_KEY
+from config import BASE_DIR, SECRET_KEY
 from routes import main_bp
 from version import APP_VERSION
 from request_security import install_request_protection
@@ -17,6 +17,7 @@ from request_security import install_request_protection
 import webview
 from manufacturer_db import start_manufacturer_database_update
 from app_lifecycle import stop_background_tasks
+from single_instance import AlreadyRunningError, desktop_instance
 
 
 def create_app() -> Flask:
@@ -28,6 +29,11 @@ def create_app() -> Flask:
     install_request_protection(app)
     app.register_blueprint(main_bp)
 
+    @app.context_processor
+    def workspace_drafts():
+        from workspace_state import read_section
+        return {"workspace_drafts": read_section("drafts")}
+
     @app.get("/_instance_health")
     def instance_health():
         return jsonify(instance_id=app.config["INSTANCE_ID"])
@@ -36,13 +42,6 @@ def create_app() -> Flask:
 
 
 app = create_app()
-
-
-DEFAULT_PORT = 49780
-
-
-class PortInUseError(RuntimeError):
-    """The desktop app cannot own its fixed local port."""
 
 
 _server_stopping = threading.Event()
@@ -55,7 +54,8 @@ def start_flask(server):
             raise
 
 
-def create_desktop_server(port=DEFAULT_PORT):
+def create_desktop_server(port=0):
+    """Reserve an OS-selected loopback port and pass the bound socket to Waitress."""
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         if sys.platform == "win32":
@@ -68,7 +68,7 @@ def create_desktop_server(port=DEFAULT_PORT):
         raise
 
 
-def wait_for_flask(instance_id, server_thread, host="127.0.0.1", port=DEFAULT_PORT, timeout=10):
+def wait_for_flask(instance_id, server_thread, port, host="127.0.0.1", timeout=10):
     deadline = time.monotonic() + timeout
     url = f"http://{host}:{port}/_instance_health"
     while time.monotonic() < deadline and server_thread.is_alive():
@@ -84,23 +84,30 @@ def wait_for_flask(instance_id, server_thread, host="127.0.0.1", port=DEFAULT_PO
 
 
 def run_desktop():
-    try:
-        server = create_desktop_server()
-    except OSError as exc:
-        raise PortInUseError(f"AVNetworkingTools is already running, or port {DEFAULT_PORT} is in use. Close the other application before starting a new window.") from exc
+    with desktop_instance(BASE_DIR / "desktop.lock"):
+        _run_desktop()
+
+
+def _run_desktop():
+    from workspace_state import start_checkpointing
+
+    server = create_desktop_server()
+    finish_workspace = start_checkpointing()
     _server_stopping.clear()
     flask_thread = threading.Thread(target=start_flask, args=(server,), daemon=True)
     try:
+        port = int(server.effective_port)
         flask_thread.start()
-        if not wait_for_flask(app.config["INSTANCE_ID"], flask_thread):
+        if not wait_for_flask(app.config["INSTANCE_ID"], flask_thread, port=port):
             raise RuntimeError("AVNetworkingTools did not respond after startup. The desktop window was not opened.")
         start_manufacturer_database_update()
-        webview.create_window("AVNetworkingTools", f"http://127.0.0.1:{DEFAULT_PORT}",
+        webview.create_window("AVNetworkingTools", f"http://127.0.0.1:{port}",
                               width=1280, height=800, resizable=True, text_select=True,
                               background_color="#242424")
         webview.start()
     finally:
         stop_background_tasks()
+        finish_workspace()
         _server_stopping.set()
         server.task_dispatcher.shutdown()
         server.close()
@@ -114,12 +121,11 @@ if __name__ == "__main__":
         raise SystemExit(run_packaged_smoke(sys.modules["__main__"], sys.argv[2]))
     try:
         run_desktop()
-    except PortInUseError as exc:
-        message = str(exc)
-        print(message)
+    except AlreadyRunningError as exc:
+        print(str(exc))
         if sys.platform == "win32":
             import ctypes
-            ctypes.windll.user32.MessageBoxW(None, message, "AVNetworkingTools", 0x40)
+            ctypes.windll.user32.MessageBoxW(None, str(exc), "AVNetworkingTools", 0x40)
         raise SystemExit(0) from None
     except Exception as exc:
         message = str(exc)
