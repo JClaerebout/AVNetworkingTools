@@ -28,6 +28,8 @@ def create_app() -> Flask:
     app.config["INSTANCE_ID"] = secrets.token_urlsafe(24)
     install_request_protection(app)
     app.register_blueprint(main_bp)
+    from api_routes import api_bp
+    app.register_blueprint(api_bp)
 
     @app.context_processor
     def workspace_drafts():

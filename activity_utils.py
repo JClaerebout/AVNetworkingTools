@@ -9,6 +9,10 @@ from wifi_utils import get_wifi_activity
 
 def get_active_tasks() -> list[dict]:
     tasks = []
+    from api_tools import status
+    api = status()
+    if api["http_running"] or api["ws_state"] != "Disconnected":
+        tasks.append({"key": "api", "label": "API Requests · " + ("HTTP running" if api["http_running"] else api["ws_state"]), "endpoint": "api_tools.page"})
     scan = get_scan_activity()
     if scan["scan"] or scan["lookup"] or scan["monitor"]:
         phase = ("Scanning" if scan["scan"] else "Looking up details" if scan["lookup"]

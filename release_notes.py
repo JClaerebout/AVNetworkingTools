@@ -6,6 +6,7 @@ from version import APP_VERSION
 STATE_FILE = BASE_DIR / "release_notes_seen.json"
 # Keep these highlights short and update them with each release.
 RELEASE_NOTES = (
+    "Test HTTP(S) APIs and WebSocket text messages from More > API Requests.",
     "Save and reload workspaces, including previous network settings.",
     "Review Wi-Fi channel conflicts and download a report.",
     "Spot newly discovered devices while monitoring an IP scan.",

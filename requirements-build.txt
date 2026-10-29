@@ -31,3 +31,5 @@ bottle==0.13.4
 typing_extensions==4.16.0
 pywin32==311
 waitress==3.0.2
+
+websocket-client==1.9.0

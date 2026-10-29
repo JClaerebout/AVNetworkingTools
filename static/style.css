@@ -1035,8 +1035,12 @@ input:focus, select:focus {
     margin-bottom: 0;
 }
 
-.check-label input {
+.check-label input[type="checkbox"] {
     width: auto;
+    height: auto;
+    flex: 0 0 auto;
+    margin: 0;
+    padding: 0;
 }
 
 .export-status {

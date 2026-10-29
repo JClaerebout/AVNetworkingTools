@@ -293,7 +293,8 @@ def workspace_action(action, name=None, *, overwrite=False, new_name=None):
             snapshot_runtime()
             workspaces[name] = {"drafts": read_section("drafts"), "runtime": read_section("runtime"),
                                 "libraries": workspace_libraries(),
-                                "previous_network_configs": read_section("previous_network_configs")}
+                                "previous_network_configs": read_section("previous_network_configs"),
+                                "api_setups": read_section("api_setups")}
             write_section("workspaces", workspaces)
             write_section("current_name", name)
             return
@@ -307,9 +308,10 @@ def workspace_action(action, name=None, *, overwrite=False, new_name=None):
             drafts["avNetworkingTools:theme"] = theme
         restore_runtime(saved.get("runtime", {}), replace=True)
         def update(records):
-            records = [item for item in records if item.get("name") not in {"drafts", "runtime", "current_name", "libraries", "previous_network_configs"}]
+            records = [item for item in records if item.get("name") not in {"drafts", "runtime", "current_name", "libraries", "previous_network_configs", "api_setups"}]
             return records + [{"name": "current_name", "value": name if action == "reload" else "new workspace"},
                               {"name": "libraries", "value": saved.get("libraries", {})},
+                              {"name": "api_setups", "value": saved.get("api_setups", {})},
                               {"name": "previous_network_configs", "value": saved.get("previous_network_configs", {})},
                               {"name": "drafts", "value": drafts},
                               {"name": "runtime", "value": saved.get("runtime", {})}], None

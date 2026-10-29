@@ -4,6 +4,7 @@ import threading
 
 
 def stop_background_tasks():
+    import api_tools
     import connection_utils
     import multicast_utils
     import ping_utils
@@ -12,6 +13,7 @@ def stop_background_tasks():
     import wifi_utils
 
     tasks = (
+        ("WebSocket", api_tools.stop_ws),
         ("scan", scan_utils.stop_scan, (scan_utils, "_scan_thread"), (scan_utils, "_lookup_thread")),
         ("monitor", scan_utils.stop_monitor, (scan_utils, "_monitor_thread")),
         ("ping", ping_utils.stop_ping, (ping_utils, "_ping_thread")),

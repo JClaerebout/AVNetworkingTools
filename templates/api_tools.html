@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% block title %}API Requests · AVNetworkingTools{% endblock %}
+{% block subtitle %}Test HTTP(S) APIs and standard WebSocket text messages.{% endblock %}
+{% block content %}
+<style>
+    /* Author button display rules must not override protocol visibility. */
+    #apiTool [hidden] { display: none !important; }
+</style>
+<section class="card" id="apiTool">
+    <h2 id="apiHeading">HTTP(S) Requests</h2>
+    <p id="apiDescription" class="hint">Send an individual HTTP request and inspect its response.</p>
+    <div class="actions" role="tablist" aria-label="Protocol">
+        <button class="btn" type="button" role="tab" aria-selected="true" data-mode="http">HTTP(S)</button>
+        <button class="btn secondary" type="button" role="tab" aria-selected="false" data-mode="ws">WebSocket</button>
+    </div>
+    <label for="apiUrl">URL</label><input id="apiUrl" data-sensitive type="url" placeholder="https://192.168.1.100/api/status" autocomplete="off">
+    <div id="httpOptions"><label for="apiMethod">Method</label><select id="apiMethod"><option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option><option>HEAD</option><option>OPTIONS</option></select></div>
+    <details><summary>Headers, authentication and connection settings</summary>
+        <label for="apiHeaders">Headers (one Name: value per line)</label><textarea id="apiHeaders" data-sensitive rows="4" placeholder="Content-Type: application/json" spellcheck="false"></textarea>
+        <label for="apiAuth">Authentication</label><select id="apiAuth"><option value="none">None / custom headers</option><option value="basic">Basic</option><option value="bearer">Bearer token</option></select>
+        <div id="basicAuth" hidden><label for="apiUsername">Username</label><input id="apiUsername" data-sensitive autocomplete="off"><label for="apiPassword">Password</label><input id="apiPassword" type="password" autocomplete="off"></div>
+        <div id="bearerAuth" hidden><label for="apiToken">Token</label><input id="apiToken" type="password" autocomplete="off"></div>
+        <label for="apiTimeout">Timeout (seconds, 1–60)</label><input id="apiTimeout" type="number" min="1" max="60" value="10">
+        <label class="check-label"><input id="apiVerify" type="checkbox" checked> Verify TLS certificate</label>
+        <p id="tlsWarning" class="hint" hidden>Certificate verification is disabled. Use only for a trusted device with a self-signed certificate.</p>
+    </details>
+    <label for="apiBody" id="bodyLabel">Request body (optional text or JSON)</label><textarea id="apiBody" data-sensitive rows="6" spellcheck="false"></textarea>
+    <div class="actions">
+        <button class="btn" id="apiSend" type="button">Send request</button>
+        <button class="btn" id="apiConnect" type="button" hidden>Connect</button>
+        <button class="btn secondary" id="apiDisconnect" type="button" hidden>Disconnect</button>
+    </div>
+    <p id="apiState" role="status" aria-live="polite"></p>
+    <details><summary>Saved setups</summary>
+        <p class="hint">Saves protocol, server origin, method, authentication type, timeout and TLS setting in this workspace. Re-enter the path, query, headers, body and credentials after loading.</p>
+        <label for="apiSetupName">Setup name</label><input id="apiSetupName" maxlength="100" data-sensitive>
+        <label for="apiSetup">Saved setup</label><select id="apiSetup" data-no-draft></select>
+        <div class="actions"><button class="btn secondary" id="apiSave" type="button">Save</button><button class="btn secondary" id="apiLoad" type="button">Load</button><button class="btn secondary" id="apiDelete" type="button">Delete</button></div>
+    </details>
+</section>
+<section class="card">
+    <h2 id="apiResultHeading">HTTP response</h2>
+    <p id="apiResultHint" class="hint"></p>
+    <div class="actions"><button class="btn secondary" id="apiCopy" type="button">Copy</button><button class="btn secondary" id="apiExport" type="button">Export text</button><button class="btn secondary" id="apiClear" type="button">Clear</button></div>
+    <pre id="apiOutput" class="ping-output" style="white-space:pre-wrap;overflow-wrap:anywhere">No results yet.</pre>
+</section>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='api_tools.js') }}?v=protocol-separation-1"></script>{% endblock %}
