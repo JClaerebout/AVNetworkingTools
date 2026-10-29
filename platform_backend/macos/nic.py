@@ -2,9 +2,9 @@
 import ipaddress
 import re
 import shlex
-import threading
 from datetime import datetime
 
+from previous_config import get_previous_config, remember_config
 from history import save_history_entry
 from system_utils import run_cmd
 
@@ -24,14 +24,14 @@ def _apple_quote(value):
     return '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"'
 
 
-_previous = {}
-_previous_lock = threading.Lock()
 
 def _remember(name):
-    previous = next((n for n in get_nics() if n["name"] == name), None)
-    with _previous_lock:
-        if previous:
-            _previous[name] = previous
+    try:
+        previous = next((n for n in get_nics() if n["name"] == name), None)
+    except Exception:
+        previous = None
+    remember_config(name, previous)
+
 
 def _ordered_services():
     code, out, err = _run(["/usr/sbin/networksetup", "-listnetworkserviceorder"])
@@ -241,10 +241,9 @@ def renew_dhcp(name):
 
 
 def restore_previous_config(name):
-    with _previous_lock:
-        previous = _previous.get(name)
+    previous = get_previous_config(name)
     if not previous:
-        return False, "No previous settings are available for this service in this session."
+        return False, "No previous settings are available for this service."
     if previous["dhcp_raw"] == "Enabled":
         return set_dhcp(name)
     return set_static(name, previous["ip"], previous["subnet"], previous["gateway"], previous["dns"])

@@ -277,15 +277,15 @@ class NetworkSettingsTests(unittest.TestCase):
 
     @unittest.skipIf(IS_MACOS, "Windows network configuration API; macOS covered by test_macos_backend")
     def test_restore_uses_original_dhcp_or_static_settings(self):
-        with patch.dict(nic._previous_configs,{"Offline":{"dhcp_raw":"Enabled"}}),patch.object(nic,"set_dhcp",return_value=(True,"Restored")) as restore:
+        with patch.object(nic,"get_previous_config",return_value={"dhcp_raw":"Enabled"}),patch.object(nic,"set_dhcp",return_value=(True,"Restored")) as restore:
             self.assertTrue(nic.restore_previous_config("Offline")[0]);restore.assert_called_once_with("Offline")
-        with patch.dict(nic._previous_configs,{"Offline":{"ip":"192.0.2.10","subnet":"255.255.255.0","dns":["192.0.2.1"]}}),patch.object(nic,"set_static",return_value=(True,"Restored")) as restore:
+        with patch.object(nic,"get_previous_config",return_value={"ip":"192.0.2.10","subnet":"255.255.255.0","dns":["192.0.2.1"]}),patch.object(nic,"set_static",return_value=(True,"Restored")) as restore:
             self.assertTrue(nic.restore_previous_config("Offline")[0]);restore.assert_called_once_with("Offline","192.0.2.10","255.255.255.0","",["192.0.2.1"])
 
     def test_failed_snapshot_read_removes_stale_restore(self):
-        with patch.dict(nic._previous_configs,{"Offline":{"ip":"old"}}),patch.object(nic,"get_nics",side_effect=RuntimeError("unavailable")):
+        with patch.object(nic,"remember_config") as remember,patch.object(nic,"get_nics",side_effect=RuntimeError("unavailable")):
             nic._remember_config("Offline")
-            self.assertFalse(nic.restore_previous_config("Offline")[0])
+            remember.assert_called_once_with("Offline", None)
 
 
 class ScriptOutcomeTests(unittest.TestCase):

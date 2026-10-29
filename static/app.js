@@ -382,9 +382,26 @@ function showResponseNotice(responseHtml) {
 }
 
 document.querySelectorAll('.config-form, .priority-form, form[id^="release-"], form[id^="renew-"], form[id^="restore-"]').forEach(form => {
-    form.addEventListener('submit', event => {
+    form.addEventListener('submit', async event => {
         event.preventDefault();
         if (form.closest('.nic-card')?.classList.contains('is-busy')) return;
+        let restoreSettings;
+        if (form.id.startsWith('restore-')) {
+            try {
+                const name = new FormData(form).get('interface');
+                const response = await fetch(`/restore-network/preview?interface=${encodeURIComponent(name)}`);
+                const settings = await response.json();
+                if (!response.ok) throw new Error(settings.message);
+                const dhcp = settings.dhcp_raw === 'Enabled';
+                const details = dhcp ? 'Mode: DHCP (automatic IP and DNS)' :
+                    `Mode: Static\nIP: ${settings.ip}\nSubnet: ${settings.subnet}\nGateway: ${settings.gateway || 'None'}\nDNS: ${(settings.dns || []).join(', ') || 'None'}`;
+                restoreSettings = JSON.stringify(settings);
+                if (!window.confirm(`Restore previous settings for ${name}?\n\n${details}\n\nApply these settings?`)) return;
+            } catch (error) {
+                showOperationNotice(error.message || 'Could not load previous settings.', 'error');
+                return;
+            }
+        }
         const message = operationMessage(form);
         const busyCard = showNicBusyOverlay(form, message);
         showOperationNotice(message);
@@ -423,7 +440,9 @@ document.querySelectorAll('.config-form, .priority-form, form[id^="release-"], f
             hideNicBusyOverlay(busyCard);
             showOperationNotice('Network change failed. Please try again.', 'error');
         };
-        request.send(new FormData(form));
+        const payload = new FormData(form);
+        if (restoreSettings) payload.set("confirmed_settings", restoreSettings);
+        request.send(payload);
     });
 });
 

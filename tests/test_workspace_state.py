@@ -21,6 +21,27 @@ class WorkspaceTests(unittest.TestCase):
         directory_override.start()
         self.addCleanup(directory_override.stop)
 
+    def test_previous_network_settings_survive_restart_and_workspace_reload(self):
+        from previous_config import remember_config, get_previous_config
+        settings = {"dhcp_raw": "Disabled", "ip": "192.0.2.10",
+                    "subnet": "255.255.255.0", "gateway": "", "dns": ["192.0.2.1"]}
+        remember_config("Ethernet", settings)
+        client = authorized_client(app.create_app())
+        self.assertEqual(client.get('/restore-network/preview?interface=Ethernet').json, settings)
+        with patch.object(workspace, "snapshot_runtime"), patch.object(workspace, "restore_runtime"), patch('activity_utils.get_active_tasks', return_value=[]):
+            workspace.workspace_action("save", "Network")
+            workspace.workspace_action("new")
+            self.assertIsNone(get_previous_config("Ethernet"))
+            workspace.workspace_action("reload", "Network")
+        self.assertEqual(get_previous_config("Ethernet"), settings)
+        with patch('routes.restore_previous_config', return_value=(True, "Restored")) as restore:
+            client.post('/restore-network', data={"interface": "Ethernet"})
+            restore.assert_not_called()
+            client.post('/restore-network', data={"interface": "Ethernet", "confirmed_settings": json.dumps(settings)})
+            restore.assert_called_once_with("Ethernet")
+        remember_config("Ethernet", None)
+        self.assertIsNone(get_previous_config("Ethernet"))
+
     def test_drafts_survive_new_app_and_strip_credentials(self):
         client = authorized_client(app.create_app())
         key = "avNetworkingTools:page-fields:/connection-test"

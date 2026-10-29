@@ -292,7 +292,8 @@ def workspace_action(action, name=None, *, overwrite=False, new_name=None):
                 raise ValueError("A workspace with this name already exists. Confirm replacement to save it.")
             snapshot_runtime()
             workspaces[name] = {"drafts": read_section("drafts"), "runtime": read_section("runtime"),
-                                "libraries": workspace_libraries()}
+                                "libraries": workspace_libraries(),
+                                "previous_network_configs": read_section("previous_network_configs")}
             write_section("workspaces", workspaces)
             write_section("current_name", name)
             return
@@ -306,9 +307,10 @@ def workspace_action(action, name=None, *, overwrite=False, new_name=None):
             drafts["avNetworkingTools:theme"] = theme
         restore_runtime(saved.get("runtime", {}), replace=True)
         def update(records):
-            records = [item for item in records if item.get("name") not in {"drafts", "runtime", "current_name", "libraries"}]
+            records = [item for item in records if item.get("name") not in {"drafts", "runtime", "current_name", "libraries", "previous_network_configs"}]
             return records + [{"name": "current_name", "value": name if action == "reload" else "new workspace"},
                               {"name": "libraries", "value": saved.get("libraries", {})},
+                              {"name": "previous_network_configs", "value": saved.get("previous_network_configs", {})},
                               {"name": "drafts", "value": drafts},
                               {"name": "runtime", "value": saved.get("runtime", {})}], None
         update_list(STATE_FILE, lambda item: isinstance(item, dict), update)

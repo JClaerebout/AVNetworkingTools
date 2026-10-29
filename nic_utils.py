@@ -6,12 +6,11 @@ import time
 from datetime import datetime
 from typing import Dict, List, Optional
 
+from previous_config import get_previous_config, remember_config
 from history import save_history_entry
 from system_utils import run_cmd, run_powershell
 
 
-_previous_configs = {}
-_config_lock = threading.RLock()
 _metrics_cache_lock = threading.Lock()
 _metrics_cache = {"until": 0.0, "value": {}}
 
@@ -21,19 +20,13 @@ def _remember_config(interface_name):
         previous = next((dict(n) for n in get_nics() if n["name"] == interface_name), None)
     except Exception:
         previous = None
-    with _config_lock:
-        if previous:
-            _previous_configs[interface_name] = previous
-        else:
-            # Never offer a stale snapshot as the settings immediately preceding this change.
-            _previous_configs.pop(interface_name, None)
+    remember_config(interface_name, previous)
 
 
 def restore_previous_config(interface_name):
-    with _config_lock:
-        previous = _previous_configs.get(interface_name)
+    previous = get_previous_config(interface_name)
     if not previous:
-        return False, "No previous settings are available for this interface in this session."
+        return False, "No previous settings are available for this interface."
     if previous.get("dhcp_raw") == "Enabled":
         return set_dhcp(interface_name)
     return set_static(interface_name, previous["ip"], previous["subnet"], previous.get("gateway", ""), previous.get("dns", []))

@@ -1,4 +1,5 @@
 import csv
+import json
 import io
 import ipaddress
 import webbrowser
@@ -8,6 +9,7 @@ from pathlib import Path
 
 from flask import Blueprint, Response, current_app, flash, jsonify, redirect, render_template, request, url_for
 
+from previous_config import get_previous_config
 from history import load_history
 from ping_utils import get_ping_status, load_ping_history, start_ping, stop_ping
 from nic_utils import clean_dns, get_nics, release_dhcp, renew_dhcp, set_dhcp, set_static, set_interface_metric, restore_previous_config
@@ -144,9 +146,25 @@ def dhcp_release():
     return redirect(url_for("main.index"))
 
 
+@main_bp.route("/restore-network/preview")
+def restore_network_preview():
+    previous = get_previous_config(request.args.get("interface", "").strip())
+    if not previous:
+        return jsonify({"message": "No previous settings are available for this interface."}), 404
+    return jsonify(previous)
+
+
 @main_bp.route("/restore-network", methods=["POST"])
 def restore_network():
-    success, message = restore_previous_config(request.form.get("interface", "").strip())
+    name = request.form.get("interface", "").strip()
+    try:
+        confirmed = json.loads(request.form.get("confirmed_settings", "null"))
+    except (ValueError, TypeError):
+        confirmed = None
+    if not confirmed or confirmed != get_previous_config(name):
+        flash("Previous settings changed or were not confirmed. Review Restore previous again.", "error")
+        return redirect(url_for("main.index"))
+    success, message = restore_previous_config(name)
     flash(message, "success" if success and "WARNING" not in message else "error")
     return redirect(url_for("main.index"))
 
