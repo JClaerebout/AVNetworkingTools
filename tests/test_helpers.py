@@ -142,8 +142,8 @@ class HelperTests(unittest.TestCase):
         caus = next(item for item in conflicts if item["ssid"] == "Claerebout-Caus")
 
         self.assertEqual(len(conflicts), 3)
-        self.assertEqual(caus["severity"], "info")
-        self.assertEqual(caus["severity_label"], "Weak")
+        self.assertEqual(caus["severity"], "warn")
+        self.assertEqual(caus["severity_label"], "Warning")
         self.assertIn("2 other AP radio(s) sharing channel 1", caus["reason"])
 
     def test_wifi_recommendation_prefers_least_crowded_24ghz_channel(self):

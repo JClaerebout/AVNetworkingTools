@@ -14,7 +14,7 @@ from nic_utils import clean_dns, get_nics, release_dhcp, renew_dhcp, set_dhcp, s
 from scan_utils import get_monitor_log, get_scannable_nics, get_scan_status, start_lookup, start_scan, stop_scan, start_monitor, stop_monitor, set_monitor_paused
 from connection_utils import get_connection_status, get_serial_ports, send_data, start_connection, stop_connection
 from system_utils import is_admin
-from wifi_utils import get_wifi_status, start_wifi_scan, stop_wifi_scan
+from wifi_utils import get_wifi_status, start_wifi_scan, stop_wifi_scan, summarize_wifi_conflicts
 from connection_history import (
     get_connection_history_entry,
     load_connection_history,
@@ -631,6 +631,46 @@ def wifi_scan_start():
 def wifi_scan_stop():
     success, message = stop_wifi_scan()
     return jsonify({**get_wifi_status(), "success": success, "message": message})
+
+
+def _wifi_report_content(status):
+    lines = ["Wi-Fi scan report", f"Generated: {datetime.now().isoformat(timespec='seconds')}",
+             f"Status: {status.get('message', '')}",
+             "Potential overlap and channel sharing are scan estimates, not measured interference.",
+             "Unknown widths use narrow-channel assumptions; wide-channel overlap is provisional.",
+             "BSSIDs identify advertised radios, not necessarily separate physical access points.", ""]
+    lines.append("Channel sharing and overlap:")
+    summary = summarize_wifi_conflicts(status.get("conflicts", []))
+    for item in summary:
+        for peer in item.get("conflicting_networks", []):
+            lines.append(f"  {peer['relationship']}: {item.get('ssid', '')} [{item.get('bssid', '')}], {item.get('band', '')} channel {item.get('channel', '')} <-> {peer.get('ssid', '')} [{peer.get('bssid', '')}], channel {peer.get('channel', '')}")
+    lines.extend(["", "Scan inventory:"])
+    conflicts = {str(item.get("bssid", "")).lower(): item for item in status.get("conflicts", [])}
+    for group in status.get("results", []):
+        lines.append(f"SSID: {group.get('ssid', '')}")
+        for ap in group.get("bssids", []):
+            analysis = conflicts.get(str(ap.get("bssid", "")).lower(), ap)
+            lines.append(f"  {ap.get('bssid', '-')} | {ap.get('band', 'unknown')} | Channel {ap.get('channel', '-')} | Width {ap.get('channel_width') or 'unknown'} | {ap.get('signal_dbm', '-')} dBm")
+            lines.append(f"  Assessment: {analysis.get('reason', 'No potential conflict detected')}")
+        lines.append("")
+    return "\r\n".join(lines) + "\r\n"
+
+
+@main_bp.route("/wifi-scan/export.txt", methods=["GET", "POST"])
+def wifi_scan_export():
+    status = get_wifi_status()
+    if not status.get("results"):
+        return jsonify(success=False, message="Scan Wi-Fi networks before downloading a report."), 409
+    filename = f"wifi-report-{datetime.now().strftime('%Y%m%d-%H%M%S')}.txt"
+    content = _wifi_report_content(status)
+    if request.method == "POST":
+        try:
+            destination = _save_download(filename, content)
+        except OSError as exc:
+            return jsonify(success=False, message=f"Could not save report: {exc}"), 500
+        return jsonify(success=True, filename=destination.name, path=str(destination))
+    return Response(content, content_type="text/plain; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"', "Cache-Control": "no-store"})
 
 
 @main_bp.route("/wifi-scan/status")

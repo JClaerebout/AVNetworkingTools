@@ -64,11 +64,17 @@ def scan():
             number = str(channel.channelNumber()) if channel else ""
             rssi = int(network.rssiValue())
             band = "2.4GHz" if number.isdigit() and int(number) <= 14 else "5GHz" if number else "unknown"
+            if channel:
+                band_value = channel.channelBand()
+                band = next((label for name, label in (("kCWChannelBand2GHz", "2.4GHz"), ("kCWChannelBand5GHz", "5GHz"), ("kCWChannelBand6GHz", "6GHz"))
+                             if getattr(CoreWLAN, name, None) == band_value), "unknown")
+            width = next((f"{mhz} MHz" for mhz in (20, 40, 80, 160)
+                          if channel and getattr(CoreWLAN, f"kCWChannelWidth{mhz}MHz", None) == channel.channelWidth()), "")
             items.append({"ssid": network.ssid() or "Hidden network", "bssid": network.bssid() or "",
                           "authentication": "Secure" if network.supportsSecurity_(CoreWLAN.kCWSecurityWPAPersonal) else "Unknown",
                           "encryption": "", "signal_percent": max(0, min(100, 2 * (rssi + 100))),
                           "signal_dbm": rssi, "channel": number, "band": band,
-                          "radio_type": "", "channel_width": "", "channel_utilization_percent": None,
+                          "radio_type": "", "channel_width": width, "channel_utilization_percent": None,
                           "connected_stations": None, "medium_available_capacity": ""})
         if not items and not interface.ssid():
             raise RuntimeError("No Wi-Fi results are available. Check Wi-Fi and Location Services permissions.")

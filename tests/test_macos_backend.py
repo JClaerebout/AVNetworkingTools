@@ -173,6 +173,19 @@ class MacBackendTests(unittest.TestCase):
         self.assertTrue(cached)
         self.assertEqual(items[0]["ssid"], "Office")
 
+    def test_wifi_reads_native_band_and_width(self):
+        channel = SimpleNamespace(channelNumber=lambda: 5, channelBand=lambda: 3, channelWidth=lambda: 4)
+        network = SimpleNamespace(wlanChannel=lambda: channel, rssiValue=lambda: -60,
+                                  ssid=lambda: "Six", bssid=lambda: "00:11:22:33:44:55",
+                                  supportsSecurity_=lambda _: True)
+        interface = SimpleNamespace(scanForNetworksWithName_error_=lambda *_: ([network], None))
+        fake = SimpleNamespace(CWWiFiClient=SimpleNamespace(sharedWiFiClient=lambda: SimpleNamespace(interface=lambda: interface)),
+                               kCWSecurityWPAPersonal=1, kCWChannelBand6GHz=3, kCWChannelWidth80MHz=4)
+        with patch.dict(sys.modules, {"CoreWLAN": fake}), patch.object(wifi, "_check_location_permission"):
+            items, cached = wifi.scan()
+        self.assertEqual(items[0]["band"], "6GHz")
+        self.assertEqual(items[0]["channel_width"], "80 MHz")
+
     def test_delete_route_is_gone(self):
         from app import app
         response = app.test_client().post(

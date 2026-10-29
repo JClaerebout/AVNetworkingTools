@@ -21,8 +21,16 @@
 
     <div class="actions">
         <button id="startWifiScan" class="btn" type="button">Start Scan</button>
+        <button id="downloadWifiReport" class="btn" type="button" disabled>Download Report</button>
         <button id="stopWifiScan" class="btn warn" type="button">Stop Scan</button>
     </div>
+    <p id="wifiExportStatus" class="hint" role="status"></p>
+</div>
+
+<div class="card">
+    <h2>Channel sharing and overlap</h2>
+    <p class="hint">Potential overlap is estimated from scan data, not measured interference. Unknown widths use narrow-channel assumptions; wide-channel overlap is provisional. BSSIDs may belong to the same physical access point.</p>
+    <div id="wifiConflicts"></div>
 </div>
 
 <div class="card scan-results-card">
@@ -36,6 +44,7 @@
 {% block scripts %}
 <script
     src="{{ url_for('static', filename='wifi_scan.js') }}"
+    data-export-url="{{ url_for('main.wifi_scan_export') }}"
     data-status-url="{{ url_for('main.wifi_scan_status') }}"
     data-start-url="{{ url_for('main.wifi_scan_start') }}"
     data-stop-url="{{ url_for('main.wifi_scan_stop') }}"

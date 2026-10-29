@@ -22,6 +22,23 @@ class ScanLookupTests(unittest.TestCase):
         scan_utils._large_scan_quick_only = self.original_large_scan
         scan_utils._monitor_log = self.original_monitor_log
 
+    @patch("scan_utils.lookup_manufacturer", return_value="Vendor")
+    def test_monitor_new_devices_remain_new_until_monitor_stops(self, _vendor):
+        self._set_completed_quick_scan()
+        existing = scan_utils._scan_results[0]
+        self.assertFalse(scan_utils._monitor_update_device(existing["ip"], existing["mac"], True))
+        self.assertFalse(existing.get("monitor_new", False))
+        self.assertTrue(scan_utils._monitor_update_device("192.168.1.3", "AA:BB:CC:DD:EE:FF", True))
+        added = scan_utils._scan_results[-1]
+        self.assertTrue(added["monitor_new"])
+        scan_utils._monitor_update_device(added["ip"], added["mac"], True)
+        self.assertTrue(added["monitor_new"])
+        with patch.object(scan_utils, "_monitor_stop") as stop:
+            stop.is_set.return_value = True
+            with patch.object(scan_utils, "_monitor_running"), patch.object(scan_utils, "_monitor_paused"), patch.object(scan_utils, "_scan_message"):
+                scan_utils._monitor_worker()
+        self.assertFalse(added["monitor_new"])
+
     def _set_completed_quick_scan(self):
         scan_utils._last_scan_context.update({
             "interface": "Ethernet",

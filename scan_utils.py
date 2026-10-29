@@ -689,6 +689,7 @@ def _monitor_update_device(ip: str, mac: str, quick_scan: bool) -> bool:
             "mac": mac,
             "manufacturer": lookup_manufacturer(mac, allow_online=False),
             "hostname": "-" if quick_scan else "Looking up...",
+            "monitor_new": True,
             "missing": False,
             "miss_count": 0,
             "duplicate_ip": False,
@@ -830,6 +831,8 @@ def _monitor_worker() -> None:
     with _scan_lock:
         _monitor_running = False
         _monitor_paused = False
+        for result in _scan_results:
+            result["monitor_new"] = False
         _scan_message = "Monitoring stopped."
         _append_monitor_log_locked("Monitoring stopped.")
 

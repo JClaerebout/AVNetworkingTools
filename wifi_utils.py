@@ -150,7 +150,7 @@ def _assessment_for_ap(item):
 
     if band == "2.4GHz" and channel and channel not in {"1", "6", "11"}:
         reasons.append("2.4GHz channel is not 1, 6 or 11")
-        severity = _raise_severity(severity, "danger" if signal >= 70 else "warn")
+        severity = _raise_severity(severity, "warn")
 
     if signal <= 25:
         reasons.append("weak signal")
@@ -192,7 +192,7 @@ def _assess_channel_load(item, radios, reported_by_channel):
         distance = _channel_distance(other.get("channel"), channel)
         if distance == 0:
             same_channel += 1
-        elif band == "2.4GHz" and distance < 5:
+        elif _channel_relationship(item, other):
             adjacent_overlap += 1
 
     if adjacent_overlap:
@@ -228,6 +228,11 @@ def _finalize_scan_items(items):
         item["channel_load_assessment"] = assessment
         item.update(_assessment_for_ap(item))
 
+    analyses = {_radio_key(ap): ap for ap in _analyze_conflicts(enriched) if _radio_key(ap)}
+    for ap in enriched:
+        analysis = analyses.get(_radio_key(ap))
+        if analysis:
+            ap.update({key: analysis[key] for key in ("severity", "severity_label", "reason", "reasons", "conflicting_networks")})
     return enriched
 
 
@@ -625,6 +630,42 @@ def _recommend_channels(results):
     }
 
 
+def _channel_relationship(item, other):
+    """Potential RF overlap, not evidence of packet loss or interference."""
+    band = item.get("band")
+    if band not in {"2.4GHz", "5GHz", "6GHz"} or other.get("band") != band:
+        return None
+    try:
+        a, b = int(item.get("channel")), int(other.get("channel"))
+    except (ValueError, TypeError):
+        return None
+    if a <= 0 or b <= 0:
+        return None
+    if a == b:
+        return "Same channel"
+    if band == "2.4GHz":
+        fa, fb = (2484 if a == 14 else 2407 + 5*a), (2484 if b == 14 else 2407 + 5*b)
+        if abs(fa - fb) < 25:
+            return "Adjacent overlap"
+        # Secondary-channel direction is unavailable; avoid claiming exact overlap.
+        if any(str(x.get("channel_width", "")).startswith("40") for x in (item, other)) and abs(fa-fb) < 45:
+            return "Possible wide-channel overlap"
+    else:
+        def block(channel, record):
+            width = re.fullmatch(r"(20|40|80|160)(?:\s*MHz)?", str(record.get("channel_width", "")).strip(), re.I)
+            width = int(width.group(1)) if width else 20
+            starts = [1] if band == "6GHz" else [36, 100, 149]
+            start = max((n for n in starts if n <= channel), default=channel)
+            span = width // 5
+            lower = start + ((channel-start)//span)*span
+            return lower, lower + span
+        lo, hi = block(a, item)
+        ol, oh = block(b, other)
+        if max(lo, ol) < min(hi, oh):
+            return "Possible wide-channel overlap"
+    return None
+
+
 def _analyze_conflicts(results):
     conflicts = []
     radios = _strongest_by_radio(results)
@@ -639,45 +680,26 @@ def _analyze_conflicts(results):
         if not channel or band == "unknown":
             continue
 
-        same_channel = _strongest_by_radio([
-            other for other in radios
-            if other is not item
-            and other.get("band") == band
-            and str(other.get("channel")) == str(channel)
-            and _radio_key(other) != _radio_key(item)
-        ])
-
-        if same_channel and signal >= 40:
-            strongest = max((x.get("signal_percent", 0) for x in same_channel), default=0)
-            if strongest >= 40:
-                _add_reason(reasons, f"{len(same_channel)} other AP radio(s) sharing channel {channel}")
-                co_channel_severity = (
-                    "warn"
-                    if len(same_channel) >= 3 or (signal >= 75 and strongest >= 75)
-                    else "info"
-                )
-                severity = _raise_severity(severity, co_channel_severity)
-
-        if band == "2.4GHz":
-            adjacent = _strongest_by_radio([
-                other for other in radios
-                if other is not item
-                and other.get("band") == "2.4GHz"
-                and str(other.get("channel")) != str(channel)
-                and _radio_key(other) != _radio_key(item)
-                and _channel_distance(other.get("channel"), channel) < 5
-            ])
-
-            if adjacent and signal >= 40:
-                strongest_adjacent = max((x.get("signal_percent", 0) for x in adjacent), default=0)
-                _add_reason(reasons, f"{len(adjacent)} adjacent overlapping AP radio(s)")
-                adjacent_severity = "danger" if signal >= 70 and strongest_adjacent >= 70 else "warn"
-                severity = _raise_severity(severity, adjacent_severity)
-
-            if str(channel) not in {"1", "6", "11"}:
-                _add_reason(reasons, "2.4GHz channel is not 1, 6 or 11")
-                channel_severity = "danger" if signal >= 70 else "warn"
-                severity = _raise_severity(severity, channel_severity)
+        peers = []
+        for other in radios:
+            if other is item or (_radio_key(item) and _radio_key(other) == _radio_key(item)):
+                continue
+            relation = _channel_relationship(item, other)
+            if relation:
+                peers.append({key: other.get(key) for key in
+                              ("ssid", "bssid", "band", "channel", "channel_width", "signal_dbm", "signal_percent")} | {"relationship": relation})
+        same_channel = [peer for peer in peers if peer["relationship"] == "Same channel"]
+        adjacent = [peer for peer in peers if peer["relationship"] != "Same channel"]
+        if same_channel and signal >= 40 and max(x.get("signal_percent") or 0 for x in same_channel) >= 40:
+            _add_reason(reasons, f"{len(same_channel)} other AP radio(s) sharing channel {channel}")
+            severity = _raise_severity(severity, "warn")
+        if adjacent:
+            _add_reason(reasons, f"{len(adjacent)} adjacent overlapping AP radio(s)")
+            strongest = max(x.get("signal_percent") or 0 for x in adjacent)
+            severity = _raise_severity(severity, "danger" if signal >= 70 and strongest >= 70 else "warn")
+        if band == "2.4GHz" and str(channel) not in {"1", "6", "11"}:
+            _add_reason(reasons, "2.4GHz channel is not 1, 6 or 11 (planning guidance)")
+            severity = _raise_severity(severity, "warn")
 
         if signal <= 25:
             _add_reason(reasons, "weak signal")
@@ -686,6 +708,7 @@ def _analyze_conflicts(results):
         if reasons:
             conflicts.append({
                 **item,
+                "conflicting_networks": peers,
                 "severity": severity,
                 "severity_label": _severity_label(severity),
                 "reasons": reasons,
@@ -768,6 +791,30 @@ def stop_wifi_scan():
     return True, "Stopping WiFi scan..."
 
 
+def summarize_wifi_conflicts(conflicts):
+    """Keep each unordered radio pair once without changing per-radio assessments."""
+    seen = set()
+    summary = []
+
+    def identity(radio):
+        return (str(radio.get("band") or ""),
+                str(radio.get("bssid") or "").lower(),
+                str(radio.get("channel") or ""),
+                str(radio.get("ssid") or ""))
+
+    for item in conflicts:
+        peers = item.get("conflicting_networks", [])
+        unique = []
+        for peer in peers:
+            pair = tuple(sorted((identity(item), identity(peer))))
+            if pair not in seen:
+                seen.add(pair)
+                unique.append(peer)
+        if unique or not peers:
+            summary.append({**item, "conflicting_networks": unique})
+    return summary
+
+
 def get_wifi_status():
     with _wifi_lock:
         results = list(_wifi_results)
@@ -777,11 +824,13 @@ def get_wifi_status():
             for bssid in group.get("bssids", [])
         ]
 
+        conflicts = _analyze_conflicts(flattened)
         return {
             "running": _wifi_running,
             "message": _wifi_message,
             "results": results,
-            "conflicts": _analyze_conflicts(flattened),
+            "conflicts": conflicts,
+            "conflict_summary": summarize_wifi_conflicts(conflicts),
             "channel_recommendation": _recommend_channels(flattened),
         }
 

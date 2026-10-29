@@ -127,7 +127,16 @@
 
         const groups = data.results || [];
         renderList(groups);
+        document.getElementById("downloadWifiReport").disabled = !groups.length || exporting;
+        document.getElementById("wifiConflicts").innerHTML = (data.conflict_summary || []).map(item => {
+            const label = `<strong>${escapeHtml(item.ssid)} [${escapeHtml(item.bssid)}]</strong> ${escapeHtml(item.band)} / channel ${escapeHtml(item.channel)}`;
+            const peers = item.conflicting_networks || [];
+            if (!peers.length) return `<p>${label}: ${escapeHtml(item.reason)}</p>`;
+            return peers.map(peer => `<p>${escapeHtml(peer.relationship)}: ${label} ↔ <strong>${escapeHtml(peer.ssid)} [${escapeHtml(peer.bssid)}]</strong> / channel ${escapeHtml(peer.channel)}</p>`).join("");
+        }).join("") || '<p class="hint">No potential conflicts detected in available scan data.</p>';
     }
+
+    let exporting = false;
 
     const poller = window.AVRequests.createStatusPoller({
         url: urls.statusUrl, interval: 1000, onData: renderWifiStatus, indicator: requestStatus
@@ -147,6 +156,20 @@
 
     startWifiScanButton.addEventListener("click", startWifiScan);
     stopWifiScanButton.addEventListener("click", stopWifiScan);
+
+    document.getElementById("downloadWifiReport").addEventListener("click", async () => {
+        exporting = true;
+        const button = document.getElementById("downloadWifiReport");
+        const status = document.getElementById("wifiExportStatus");
+        button.disabled = true;
+        status.textContent = "Saving report...";
+        try {
+            const response = await fetch(urls.exportUrl, {method: "POST"});
+            const data = await response.json();
+            status.textContent = data.cancelled ? "" : data.success ? `Saved ${data.filename}.` : data.message || "Could not save report.";
+        } catch (error) { status.textContent = error.message; }
+        finally { exporting = false; button.disabled = false; }
+    });
 
     poller.start();
     window.addEventListener("pagehide", poller.stop);
