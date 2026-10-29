@@ -1,4 +1,4 @@
-# Building AVNetworkingTools 2.0.0
+# Building AVNetworkingTools
 
 ## Local development
 
