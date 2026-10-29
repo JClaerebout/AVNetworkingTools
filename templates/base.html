@@ -119,6 +119,14 @@
     <p id="workspaceMessage" class="hint" role="status" aria-live="polite"></p>
 </dialog>
 
+<dialog id="releaseNotesDialog" class="workspace-dialog" aria-labelledby="releaseNotesTitle">
+    <h2 id="releaseNotesTitle">What’s new</h2>
+    <ul id="releaseNotesHighlights"></ul>
+    <div class="actions">
+        <button id="releaseNotesClose" class="btn" type="button" autofocus>Got it</button>
+    </div>
+</dialog>
+
 <datalist id="lastScanIpSuggestions"></datalist>
 
 <div id="updateDialog" class="update-dialog" role="dialog" aria-modal="true" aria-labelledby="updateTitle" hidden>
@@ -141,7 +149,7 @@
     data-ip-scan-status-url="{{ url_for('main.ip_scan_status') }}"
 ></script>
 <script src="{{ url_for('static', filename='enter_shortcuts.js') }}?v=2"></script>
-<script src="{{ url_for('static', filename='updater.js') }}?v=1"></script>
+<script src="{{ url_for('static', filename='updater.js') }}?v=2"></script>
 <script src="{{ url_for('static', filename='status_requests.js') }}?v=1"></script>
 <script src="{{ url_for('static', filename='activity.js') }}?v=1" data-activity-url="{{ url_for('main.active_tasks') }}"></script>
 {% block scripts %}{% endblock %}

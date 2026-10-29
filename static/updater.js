@@ -101,5 +101,37 @@
         dialog.hidden = true;
     });
 
-    checkForUpdate();
+    async function showInstalledReleaseNotes() {
+        const notesDialog = document.getElementById('releaseNotesDialog');
+        if (!notesDialog) return;
+        try {
+            const response = await fetch('/api/release-notes', { cache: 'no-store' });
+            if (!response.ok) return;
+            const { notes } = await response.json();
+            if (!notes) return;
+            document.getElementById('releaseNotesTitle').textContent = `What’s new in v${notes.version}`;
+            const highlights = document.getElementById('releaseNotesHighlights');
+            highlights.replaceChildren();
+            for (const highlight of notes.highlights) {
+                const item = document.createElement('li');
+                item.textContent = highlight;
+                highlights.appendChild(item);
+            }
+            await new Promise(resolve => {
+                const previousFocus = document.activeElement;
+                notesDialog.addEventListener('close', () => {
+                    previousFocus?.focus();
+                    resolve();
+                }, { once: true });
+                document.getElementById('releaseNotesClose').addEventListener('click', () => notesDialog.close(), { once: true });
+                notesDialog.showModal();
+                // Persist only after the notes are visible; survives port changes and restarts.
+                fetch('/api/release-notes/seen', { method: 'POST' }).catch(() => {});
+            });
+        } catch (_) {
+            // Release notes must never prevent normal startup or update checks.
+        }
+    }
+
+    showInstalledReleaseNotes().finally(checkForUpdate);
 })();

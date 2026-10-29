@@ -49,6 +49,22 @@ def _bad_json():
     return jsonify(success=False, message="Expected a JSON object."), 400
 
 
+@main_bp.route("/api/release-notes")
+def release_notes():
+    from release_notes import pending_release_notes
+    return jsonify(notes=pending_release_notes())
+
+
+@main_bp.route("/api/release-notes/seen", methods=["POST"])
+def release_notes_seen():
+    from release_notes import acknowledge_release_notes
+    try:
+        acknowledge_release_notes()
+    except OSError:
+        return jsonify(success=False), 500
+    return jsonify(success=True)
+
+
 @main_bp.route("/api/update/check")
 def update_check():
     try:
