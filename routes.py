@@ -851,3 +851,25 @@ def save_workspace_draft():
     except OSError:
         return jsonify(success=False, message="Could not save workspace."), 500
     return jsonify(success=True)
+
+
+@main_bp.post("/api/workspace/<action>")
+def manage_workspace(action):
+    from workspace_state import workspace_action
+    try:
+        data = _json_object()
+        if data is None:
+            return _bad_json()
+        workspace_action(action, data.get("name"), overwrite=data.get("overwrite") is True, new_name=data.get("new_name"))
+    except ValueError as exc:
+        return jsonify(success=False, message=str(exc)), 409
+    except OSError:
+        return jsonify(success=False, message="Could not write workspace."), 500
+    return jsonify(success=True)
+
+
+@main_bp.get("/api/workspaces")
+def list_workspaces():
+    from workspace_state import saved_workspaces, read_section
+    return jsonify(workspaces=sorted(saved_workspaces(), key=str.casefold),
+                   current_name=read_section("current_name") or "new workspace")

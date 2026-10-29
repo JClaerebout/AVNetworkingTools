@@ -2,7 +2,7 @@ from datetime import datetime
 
 from config import SCRIPT_HISTORY_FILE
 from script_utils import _normalize_blocks
-from history_store import load_list, update_list
+from workspace_state import load_workspace_list as load_list, update_workspace_list as update_list
 
 
 MAX_SCRIPTS = 50

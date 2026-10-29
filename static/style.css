@@ -1642,3 +1642,25 @@ form {
 #healthChecks span { display: block; margin-top: 6px; }
 #healthChecks strong { font-size: 1rem; }
 #technical:target { outline: 2px solid #688ebd; outline-offset: 4px; }
+
+.workspace-dialog {
+    background: var(--panel, #242424);
+    color: inherit;
+    border: 1px solid #777;
+    border-radius: 10px;
+    width: min(820px, calc(100vw - 48px));
+    max-height: 85vh;
+    overflow: auto;
+    padding: 24px;
+}
+.workspace-dialog::backdrop { background: #0009; }
+.workspace-dialog label { display: block; margin: 16px 0 6px; }
+.workspace-dialog input, .workspace-dialog select { width: 100%; box-sizing: border-box; margin-bottom: 12px; }
+html[data-theme="light"] .workspace-dialog { background: #f3f5f7; color: #1f2933; }
+
+.workspace-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-bottom: 20px; }
+.workspace-columns section { min-width: 0; }
+@media (max-width: 600px) { .workspace-columns { grid-template-columns: 1fr; } }
+
+/* Override the compact single-line select height for the workspace list. */
+#workspaceList { height: 280px; min-height: 240px; overflow-y: auto; }

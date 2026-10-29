@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 from config import PING_HISTORY_FILE
-from history_store import load_list, update_list
+from workspace_state import load_workspace_list as load_list, update_workspace_list as update_list
 
 _ping_lock = threading.Lock()
 _ping_process: Optional[subprocess.Popen] = None
@@ -164,13 +164,14 @@ def stop_ping() -> tuple[bool, str]:
 
 
 def get_ping_status() -> Dict:
+    history = load_ping_history()
     with _ping_lock:
         running = _ping_process is not None and _ping_process.poll() is None
         return {
             "running": running,
             "target": _ping_target if running else "",
             "output": list(_ping_output),
-            "history": load_ping_history(),
+            "history": history,
         }
 
 

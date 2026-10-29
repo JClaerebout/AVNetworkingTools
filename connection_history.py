@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Dict, List, Tuple
 
 from config import CONNECTION_HISTORY_FILE
-from history_store import load_list, update_list
+from workspace_state import load_workspace_list as load_list, update_workspace_list as update_list
 
 MAX_CONNECTION_HISTORY = 50
 

@@ -71,6 +71,7 @@
                         <a class="nav-link{% if current_endpoint == 'main.wifi_scan_page' %} active{% endif %}" href="{{ url_for('main.wifi_scan_page') }}"{% if current_endpoint == 'main.wifi_scan_page' %} aria-current="page"{% endif %}>WiFi Scan</a>
                     </div>
                 </details>
+                <button class="nav-link" id="workspaceOpen" type="button">Workspaces</button>
                 <button id="themeToggle" class="theme-toggle" type="button">
                     <span class="theme-toggle-icon" aria-hidden="true">&#9680;</span>
                     <span class="theme-toggle-label visually-hidden">Theme: Auto</span>
@@ -89,6 +90,34 @@
         {% block content %}{% endblock %}
     </div>
 </main>
+
+<dialog id="workspaceDialog" class="workspace-dialog" aria-labelledby="workspaceTitle">
+    <h2 id="workspaceTitle">Workspaces</h2>
+    <p class="hint">Save fields, results, logs, histories, setups and scripts on this computer. Passwords are excluded.</p>
+    <div class="workspace-columns">
+        <section>
+            <label for="workspaceName">Current workspace</label>
+            <input id="workspaceName" type="text" maxlength="100" value="new workspace">
+            <div class="actions">
+                <button class="btn" type="button" data-workspace-action="save">Save</button>
+                <button class="btn secondary" type="button" data-workspace-action="new">New workspace</button>
+            </div>
+        </section>
+        <section>
+            <label for="workspaceList">Saved workspaces</label>
+            <select id="workspaceList" size="8" aria-label="Saved workspaces"></select>
+            <div class="actions">
+                <button class="btn" type="button" data-workspace-action="reload">Load</button>
+                <button class="btn secondary" type="button" data-workspace-action="rename">Rename</button>
+                <button class="btn secondary" type="button" data-workspace-action="delete">Delete</button>
+            </div>
+        </section>
+    </div>
+    <div class="actions">
+        <button class="btn secondary" id="workspaceClose" type="button">Close</button>
+    </div>
+    <p id="workspaceMessage" class="hint" role="status" aria-live="polite"></p>
+</dialog>
 
 <datalist id="lastScanIpSuggestions"></datalist>
 

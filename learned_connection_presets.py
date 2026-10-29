@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 
 from config import CONNECTION_PRESETS_FILE
-from history_store import load_list, update_list
+from workspace_state import load_workspace_list as load_list, update_workspace_list as update_list
 
 
 MAX_LEARNED_PRESETS = 100
