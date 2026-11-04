@@ -1,10 +1,28 @@
 (() => {
     const el = id => document.getElementById(id);
+    let changingMode = false;
     let mode = 'http', setups = {}, current = {}, polling = false;
-    const modeDrafts = {};
+    const draftKey = 'avNetworkingTools:page-fields:api-modes';
+    const storage = window.workspaceStorage || sessionStorage;
+    const modeDrafts = JSON.parse(storage.getItem(draftKey) || '{}');
+    function saveDrafts() {
+        if (changingMode) return;
+        modeDrafts[mode] = config();
+        // Match saved setups: keep connection options, never request contents or credentials.
+        const safe = {activeMode: mode};
+        for (const protocol of ['http', 'ws']) {
+            const draft = modeDrafts[protocol];
+            if (!draft) continue;
+            safe[protocol] = Object.fromEntries(['method', 'auth', 'timeout', 'verify'].map(key => [key, draft[key]]));
+            try { safe[protocol].url = new URL(draft.url).origin; }
+            catch (_) { safe[protocol].url = ''; }
+        }
+        storage.setItem(draftKey, JSON.stringify(safe));
+    }
     function showMode(value) {
+        changingMode = true;
         if (value !== mode) {
-            modeDrafts[mode] = config();
+            if (mode) modeDrafts[mode] = config();
             const draft = modeDrafts[value] || {};
             const defaults = {method: 'GET', auth: 'none', timeout: 10};
             for (const name of ['url', 'method', 'headers', 'auth', 'username', 'password', 'token', 'timeout', 'body']) {
@@ -15,6 +33,8 @@
             el('apiVerify').dispatchEvent(new Event('change'));
         }
         mode = value;
+        changingMode = false;
+        saveDrafts();
         document.querySelectorAll('[data-mode]').forEach(button => {
             button.setAttribute('aria-selected', String(button.dataset.mode === mode));
             button.classList.toggle('secondary', button.dataset.mode !== mode);
@@ -30,8 +50,8 @@
         el('apiUrl').placeholder = mode === 'http' ? 'https://192.168.1.100/api/status' : 'wss://echo.websocket.org';
         el('apiResultHeading').textContent = mode === 'http' ? 'HTTP response' : 'WebSocket messages';
         el('apiResultHint').textContent = mode === 'http'
-            ? 'Redirects are displayed without following them. Responses are limited to 1 MiB. Results stay in memory until cleared or the app exits.'
-            : 'The log retains 200 messages with up to 64 KiB displayed per message. Messages stay in memory until cleared or the app exits.';
+            ? 'Redirects are displayed without following them. Responses are limited to 1 MiB. Results are saved with the workspace until cleared.'
+            : 'The log retains 200 messages with up to 64 KiB displayed per message. Messages are saved with the workspace until cleared.';
         updateButtons();
         renderOutput();
     }
@@ -121,6 +141,7 @@
         el('apiVerify').checked = setup.verify !== false;
         el('apiAuth').dispatchEvent(new Event('change'));
         el('apiVerify').dispatchEvent(new Event('change'));
+        saveDrafts();
     });
     el('apiDelete').addEventListener('click', async () => {
         const name = el('apiSetup').value;
@@ -131,8 +152,11 @@
     call('setups').then(list).catch(error => { el('apiState').textContent = error.message; });
     // Global draft restoration runs on DOMContentLoaded; reflect restored settings afterwards.
     document.addEventListener('DOMContentLoaded', () => {
-        el('apiAuth').dispatchEvent(new Event('change'));
-        el('apiVerify').dispatchEvent(new Event('change'));
+        const initialMode = modeDrafts.activeMode === 'ws' ? 'ws' : 'http';
+        mode = null;
+        showMode(initialMode);
+        document.getElementById('apiTool').addEventListener('input', saveDrafts);
+        document.getElementById('apiTool').addEventListener('change', saveDrafts);
     });
-    showMode('http'); refresh(); setInterval(refresh, 1000);
+    refresh(); setInterval(refresh, 1000);
 })();

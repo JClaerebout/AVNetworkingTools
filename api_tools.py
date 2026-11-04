@@ -1,4 +1,4 @@
-"""Isolated HTTP/WebSocket tester. Network contents are session-only."""
+"""Isolated HTTP/WebSocket tester. Network results follow workspace snapshots."""
 import base64
 from collections import deque
 from datetime import datetime
@@ -212,6 +212,26 @@ def status():
     with _lock:
         return dict(http_running=_http_running, result=_result,
                     ws_state=_session['state'] if _session else 'Disconnected', events=list(_events))
+
+
+def snapshot():
+    """Copy completed results without live sockets or credentials."""
+    import copy
+    with _lock:
+        return copy.deepcopy(dict(result=_result, events=list(_events)))
+
+
+def restore(data, *, replace=False):
+    """Restore display data only; never restart requests or connections."""
+    global _result
+    import copy
+    with _lock:
+        if replace:
+            _result = None
+            _events.clear()
+        if isinstance(data, dict):
+            _result = copy.deepcopy(data.get('result'))
+            _events.extend(copy.deepcopy(data.get('events', [])))
 
 
 def clear(mode=None):

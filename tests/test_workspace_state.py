@@ -232,6 +232,34 @@ class WorkspaceTests(unittest.TestCase):
         with self.assertWarns(RuntimeWarning):
             self.assertEqual(workspace.read_section("drafts")["avNetworkingTools:theme"], "dark")
 
+    def test_api_results_and_setups_follow_workspace_without_network_actions(self):
+        import api_tools
+        workspace.workspace_libraries()
+        result = {"status": 200, "body": "device response"}
+        events = [{"time": "12:00", "direction": "Received", "text": "device message"}]
+        with patch.object(api_tools, '_result', result), \
+             patch.object(api_tools, '_events', api_tools.deque(events, maxlen=200)), \
+             patch.object(api_tools, '_session', None), \
+             patch.object(api_tools, '_http_running', False), \
+             patch.object(api_tools, 'start_http') as http, \
+             patch.object(api_tools, 'start_ws') as connect, \
+             patch('activity_utils.get_active_tasks', return_value=[]):
+            workspace.write_section('api_setups', {'Device': {'mode': 'ws', 'origin': 'ws://device'}})
+            workspace.workspace_action('save', 'API')
+            workspace.workspace_action('new')
+            self.assertIsNone(api_tools.status()['result'])
+            self.assertEqual(api_tools.status()['events'], [])
+            self.assertEqual(api_tools.saved_setups(), {})
+            workspace.workspace_action('reload', 'API')
+            workspace.restore_runtime(replace=True)
+            self.assertEqual(api_tools.status()['result'], result)
+            self.assertEqual(api_tools.status()['events'], events)
+            self.assertEqual(api_tools.status()['ws_state'], 'Disconnected')
+            self.assertFalse(api_tools.status()['http_running'])
+            self.assertIn('Device', api_tools.saved_setups())
+            http.assert_not_called()
+            connect.assert_not_called()
+
     def test_scan_and_logs_restore_without_starting_tasks(self):
         import scan_utils as scan
         import connection_utils as connection

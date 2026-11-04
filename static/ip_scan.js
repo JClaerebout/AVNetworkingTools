@@ -31,6 +31,76 @@
 
     if (!nicSelect) return;
 
+    const scriptDialog = document.getElementById("scanScriptDialog");
+    const scriptMessage = document.getElementById("scanScriptMessage");
+    const scriptStatus = document.getElementById("scanScriptStatus");
+    const scriptDraftKey = "avNetworkingTools:scriptDraft:v1";
+    let pendingScriptIp = null;
+
+    function readScriptDraft() {
+        const value = (window.workspaceStorage || localStorage).getItem(scriptDraftKey);
+        if (value === null) return [
+            {type: 'target', targets: ''},
+            {type: 'command', value: '', is_hex: false, add_cr: false, add_lf: true}
+        ];
+        const blocks = JSON.parse(value);
+        if (!Array.isArray(blocks) || blocks.some(block => !block || !['target', 'command', 'delay'].includes(block.type))) {
+            throw new Error('Could not read the script draft. Open Scripts to check it first.');
+        }
+        return blocks;
+    }
+
+    function addScriptIp(ip, createNew = false) {
+        try {
+            const blocks = readScriptDraft();
+            let target = createNew ? null : blocks.find(block => block.type === 'target');
+            if (!target) {
+                target = {type: 'target', targets: '', protocol: 'tcp', port: '23',
+                    mode: 'sequential', device_delay: '0', username: '', password: ''};
+                if (createNew) blocks.push(target);
+                else blocks.unshift(target);
+            }
+            const targets = String(target.targets || '').replaceAll(',', '\n').split(/\r?\n/).map(value => value.trim()).filter(Boolean);
+            if (targets.includes(ip)) {
+                scriptStatus.textContent = `${ip} is already in the first target block.`;
+                return;
+            }
+            target.targets = [...targets, ip].join('\n');
+            const safeBlocks = blocks.map(block => block.type === 'target' ? {...block, password: ''} : block);
+            (window.workspaceStorage || localStorage).setItem(scriptDraftKey, JSON.stringify(safeBlocks));
+            scriptStatus.textContent = `Added ${ip} to ${createNew ? 'a new' : 'the first'} script target block.`;
+        } catch (error) {
+            scriptStatus.textContent = error.message || 'Could not update the script draft.';
+        }
+    }
+
+    function sendDeviceToScript() {
+        const ip = selectedContextItem?.ip;
+        if (!ip) return;
+        hideContextMenu();
+        try {
+            const first = readScriptDraft().find(block => block.type === 'target');
+            if (!String(first?.targets || '').trim()) {
+                addScriptIp(ip);
+                return;
+            }
+            pendingScriptIp = ip;
+            scriptMessage.textContent = `Add ${ip} to the first existing target block, or create a new target block?`;
+            scriptDialog.showModal();
+        } catch (error) { scriptStatus.textContent = error.message; }
+    }
+
+    document.getElementById('scanScriptAppend').addEventListener('click', () => {
+        if (pendingScriptIp) addScriptIp(pendingScriptIp);
+        scriptDialog.close();
+    });
+    document.getElementById('scanScriptNew').addEventListener('click', () => {
+        if (pendingScriptIp) addScriptIp(pendingScriptIp, true);
+        scriptDialog.close();
+    });
+    document.getElementById('scanScriptCancel').addEventListener('click', () => scriptDialog.close());
+    scriptDialog.addEventListener('close', () => { pendingScriptIp = null; });
+
     let latestResults = [];
     let selectedContextItem = null;
     let monitorStopping = false;
@@ -459,7 +529,7 @@
     });
     pingDeviceButton.addEventListener("click", () => openTool(urls.pingUrl));
     connectDeviceButton.addEventListener("click", () => openTool(urls.connectUrl, true));
-    addToScriptButton.addEventListener("click", () => openTool(urls.scriptsUrl));
+    addToScriptButton.addEventListener("click", sendDeviceToScript);
 
     openWebpageButton.addEventListener("click", event => {
         event.stopPropagation();

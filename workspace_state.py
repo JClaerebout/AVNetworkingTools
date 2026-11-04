@@ -64,6 +64,7 @@ def _snapshot_runtime():
     import ping_utils as ping
     import script_utils as script
     import wifi_utils as wifi
+    import api_tools
     with scan._scan_lock:
         scan_state = {name: getattr(scan, name) for name in (
             "_scan_results", "_scan_total", "_scan_done", "_lookup_total", "_lookup_done",
@@ -73,7 +74,7 @@ def _snapshot_runtime():
         scan_state = copy.deepcopy(scan_state)
     write_section("runtime", {"scan": scan_state, "connection": connection.get_connection_status(),
                              "ping": ping.get_ping_status(), "script": script.get_script_status(),
-                             "wifi": wifi.get_wifi_status()})
+                             "wifi": wifi.get_wifi_status(), "api": api_tools.snapshot()})
 
 
 def restore_runtime(data=None, *, replace=False):
@@ -82,10 +83,12 @@ def restore_runtime(data=None, *, replace=False):
     import ping_utils as ping
     import script_utils as script
     import wifi_utils as wifi
+    import api_tools
     if data is None:
         data = read_section("runtime")
     if not isinstance(data, dict):
         return
+    api_tools.restore(data.get("api", {}), replace=replace)
     with scan._scan_lock:
         if replace:
             scan._scan_results = []
@@ -189,12 +192,14 @@ def _migrate_default_workspace():
         drafts = sections.get("drafts", {})
         runtime = sections.get("runtime", {})
         workspaces = sections.get("workspaces", {})
-        has_data = bool(drafts or runtime or any(libraries.values()))
+        api_setups = sections.get("api_setups", {})
+        has_data = bool(drafts or runtime or api_setups or any(libraries.values()))
         # Existing named workspace users keep their active workspace and saves.
         if has_data and not sections.get("current_name") and not workspaces:
             workspaces = dict(workspaces)
             workspaces["Default workspace"] = copy.deepcopy({
-                "drafts": drafts, "runtime": runtime, "libraries": libraries})
+                "drafts": drafts, "runtime": runtime, "libraries": libraries,
+                "api_setups": api_setups})
             legacy = sections.get("saved")
             if legacy:
                 workspaces["Saved workspace"] = copy.deepcopy(legacy)

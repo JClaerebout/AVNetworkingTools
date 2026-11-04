@@ -76,6 +76,8 @@
         <button id="clearScanFilter" class="btn secondary" type="button">Clear</button>
     </div>
 
+    <p id="scanScriptStatus" class="hint" role="status" aria-live="polite"></p>
+
     <div class="table-wrap">
         <table class="result-table">
             <thead>
@@ -105,11 +107,20 @@
     <button id="copyHostnameButton" type="button" role="menuitem">Copy hostname</button>
     <button id="copyManufacturerButton" type="button" role="menuitem">Copy manufacturer</button>
 </div>
+<dialog id="scanScriptDialog" class="workspace-dialog" aria-labelledby="scanScriptTitle" aria-describedby="scanScriptMessage">
+    <h2 id="scanScriptTitle">Add device to script</h2>
+    <p id="scanScriptMessage"></p>
+    <div class="actions">
+        <button id="scanScriptAppend" class="btn" type="button">Add to existing block</button>
+        <button id="scanScriptNew" class="btn secondary" type="button">Add new block</button>
+        <button id="scanScriptCancel" class="btn secondary" type="button">Cancel</button>
+    </div>
+</dialog>
 {% endblock %}
 
 {% block scripts %}
 <script
-    src="{{ url_for('static', filename='ip_scan.js') }}?v=keyboard-actions-1"
+    src="{{ url_for('static', filename='ip_scan.js') }}?v=script-draft-add-1"
     data-ping-url="{{ url_for('main.ping_page') }}"
     data-connect-url="{{ url_for('main.connection_test_page') }}"
     data-scripts-url="{{ url_for('main.scripts_page') }}"
