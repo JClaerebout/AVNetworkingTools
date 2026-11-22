@@ -1668,3 +1668,50 @@ html[data-theme="light"] .workspace-dialog { background: #f3f5f7; color: #1f2933
 
 /* Override the compact single-line select height for the workspace list. */
 #workspaceList { height: 280px; min-height: 240px; overflow-y: auto; }
+
+/* NIC management follows the same controls and theme tokens as other tools. */
+.ui-icon { width: 22px; height: 22px; flex: 0 0 auto; vertical-align: middle; }
+.nav-link, .secondary-open { display: inline-flex; align-items: center; gap: 8px; }
+.nic-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+.nic-heading { display: flex; gap: 20px; align-items: center; padding-right: 85px; }
+.nic-heading h2 { margin: 0 0 3px; }
+.adapter-icon { color: var(--accent, #389bff); width: 38px; height: 38px; }
+.nic-card > .status { position: absolute; right: 18px; top: 22px; }
+.nic-card .details { margin-top: 16px; border: 1px solid var(--line); border-radius: 9px; padding: 12px; }
+.nic-card .config-form > div:not(.row):not(.actions), .nic-card .static-fields > div { display: grid; grid-template-columns: 125px minmax(0, 1fr); align-items: center; gap: 12px; }
+.nic-card .config-form label { margin: 0; }
+.nic-card .static-fields { grid-template-columns: 1fr; }
+.nic-card .mode-pending { grid-column: 2; }
+.secondary-addresses { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 14px; }
+.secondary-addresses > summary { font-size: 18px; font-weight: 600; cursor: pointer; margin-bottom: 14px; }
+.secondary-addresses:not([open]) > summary { margin-bottom: 0; }
+.secondary-row { display: flex; align-items: center; gap: 16px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel2); margin-bottom: 10px; }
+.secondary-row .secondary-ip { flex: 1; overflow-wrap: anywhere; }
+.secondary-state { color: var(--success, #67da8b); }
+.secondary-remove { color: var(--danger); background: transparent; border: 0; cursor: pointer; padding: 4px; }
+.secondary-open { margin-bottom: 10px; }
+.secondary-form { padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel2); grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto; align-items: end; }
+.secondary-form[hidden] { display: none; }
+@media (min-width: 1250px) {
+ .nic-card .details { grid-template-columns: 100px minmax(0, 1fr) 80px minmax(0, 1fr); }
+ .nic-card .details > :nth-child(-n+8) { grid-column: auto; }
+ .nic-card .details > :nth-child(1) { grid-area: 1 / 1; } .nic-card .details > :nth-child(2) { grid-area: 1 / 2; }
+ .nic-card .details > :nth-child(3) { grid-area: 2 / 1; } .nic-card .details > :nth-child(4) { grid-area: 2 / 2; }
+ .nic-card .details > :nth-child(5) { grid-area: 3 / 1; } .nic-card .details > :nth-child(6) { grid-area: 3 / 2; }
+ .nic-card .details > :nth-child(7) { grid-area: 4 / 1; } .nic-card .details > :nth-child(8) { grid-area: 4 / 2; }
+ .nic-card .details > :nth-child(9) { grid-area: 1 / 3; } .nic-card .details > :nth-child(10) { grid-area: 1 / 4; }
+ .nic-card .details > :nth-child(11) { grid-area: 2 / 3; } .nic-card .details > :nth-child(12) { grid-area: 2 / 4; }
+ .nic-card .details > :nth-child(13) { grid-area: 3 / 3; } .nic-card .details > :nth-child(14) { grid-area: 3 / 4; }
+}
+@media (max-width: 1000px) { .nic-grid { grid-template-columns: 1fr; } }
+@media (max-width: 560px) {
+ .secondary-form { grid-template-columns: 1fr 1fr; }
+ .secondary-row { gap: 8px; }
+ .nic-card .config-form > div:not(.row):not(.actions), .nic-card .static-fields > div { grid-template-columns: 90px minmax(0, 1fr); }
+}
+.secondary-check { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 4px; color: var(--panel); background: var(--success, #67da8b); font-weight: bold; }
+.secondary-state { background: var(--success-soft, rgba(103, 218, 139, .15)); border-radius: 5px; padding: 2px 8px; font-size: 12px; }
+.secondary-addresses > summary { list-style: none; display: flex; align-items: center; gap: 4px; }
+.secondary-addresses > summary::-webkit-details-marker { display: none; }
+.secondary-addresses > summary::before { content: ''; width: 9px; height: 9px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); margin: 0 16px 0 3px; }
+.secondary-addresses[open] > summary::before { transform: rotate(45deg); }

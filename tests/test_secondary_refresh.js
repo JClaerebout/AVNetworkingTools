@@ -1,0 +1,27 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const source = fs.readFileSync('static/app.js', 'utf8');
+const list = {rows: ['stale'], replaceChildren() { this.rows = []; }, append(row) { this.rows.push(row); }};
+const count = {textContent: '1'};
+const form = {hidden: false, ip: '192.168.8.42', subnet: '255.255.255.0'};
+const card = {querySelector(selector) {
+    if (selector === '.secondary-list') return list;
+    if (selector === '.secondary-count') return count;
+    if (selector === '.secondary-read-error') return null;
+    if (selector === '.secondary-form') return form;
+    throw new Error(`Unexpected mutation target: ${selector}`);
+}};
+const context = {document: {createElement() { return {append() {}, setAttribute() {}, addEventListener() {}}; }}};
+vm.createContext(context);
+vm.runInContext(source.slice(source.indexOf('function renderSecondaryAddresses'), source.indexOf('async function submitSecondaryAddress')), context);
+context.renderSecondaryAddresses(card, [{ip:'192.168.0.100',prefix:24,active:true,removable:true}]);
+assert.equal(count.textContent, '1');
+assert.equal(list.rows.length, 1);
+context.renderSecondaryAddresses(card, []);
+assert.equal(count.textContent, '0');
+assert.equal(list.rows.length, 0);
+assert.equal(form.hidden, false);
+assert.equal(form.ip, '192.168.8.42');
+assert.equal(form.subnet, '255.255.255.0');
+console.log('Secondary refresh preserves open form and updates actual addresses.');

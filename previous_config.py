@@ -13,7 +13,7 @@ def remember_config(name, previous):
         configs = read_section("previous_network_configs")
         if previous:
             configs[name] = {key: copy.deepcopy(previous[key]) for key in
-                             ("dhcp_raw", "ip", "subnet", "gateway", "dns") if key in previous}
+                             ("dhcp_raw", "ip", "subnet", "gateway", "dns", "secondary_ips") if key in previous}
         else:
             configs.pop(name, None)
         write_section("previous_network_configs", configs)

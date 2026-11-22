@@ -27,9 +27,15 @@ def restore_previous_config(interface_name):
     previous = get_previous_config(interface_name)
     if not previous:
         return False, "No previous settings are available for this interface."
-    if previous.get("dhcp_raw") == "Enabled":
-        return set_dhcp(interface_name)
-    return set_static(interface_name, previous["ip"], previous["subnet"], previous.get("gateway", ""), previous.get("dns", []))
+    if previous.get('dhcp_raw') == 'Enabled':
+        ok, message = set_dhcp(interface_name)
+    else:
+        ok, message = set_static(interface_name, previous['ip'], previous['subnet'], previous.get('gateway', ''), previous.get('dns', []))
+    if not ok:
+        return ok, message
+    from secondary_ip import restore_secondary
+    restored, detail = restore_secondary(interface_name, previous)
+    return restored, message + detail
 
 
 def _ps_literal(value):
@@ -208,7 +214,8 @@ def get_nics() -> List[Dict]:
             "dns2": dns[1] if len(dns) > 1 else "",
         })
 
-    return sort_nics(nics)
+    from secondary_ip import enrich_windows
+    return sort_nics(enrich_windows(nics))
 
 
 def get_interface_metrics(cached=False):

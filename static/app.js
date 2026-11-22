@@ -31,7 +31,7 @@
                 ? `Theme: Auto (${theme[0].toUpperCase() + theme.slice(1)})`
                 : `Theme: ${displayPreference}`;
         }
-        if (icon) icon.textContent = preference === 'auto' ? '\u25D0' : theme === 'light' ? '\u2600' : '\u263E';
+        if (icon) icon.dataset.theme = theme;
 
         if (!persist) return;
 
@@ -465,7 +465,7 @@ async function refreshNicStatus() {
             const shown = Array.from(document.querySelectorAll('.nic-card'), card => card.dataset.interfaceIndex);
             const connected = data.nics.map(nic => String(nic.if_index));
             if (shown.length !== connected.length || shown.some((index, position) => index !== connected[position])) {
-                window.location.reload();
+                if (!document.querySelector('.secondary-form:not([hidden])')) window.location.reload();
                 return;
             }
         }
@@ -497,6 +497,7 @@ async function refreshNicStatus() {
                 priority.value = value;
             }
             card.querySelectorAll('.dhcp-action').forEach(button => { button.hidden = document.body.dataset.platform === 'macos' && button.classList.contains('warn') || nic.dhcp_raw !== 'Enabled'; });
+            renderSecondaryAddresses(card, nic.secondary_ips || [], nic.secondary_error || '');
             syncNicForm(card, nic);
         }
     } catch (error) {
@@ -541,4 +542,68 @@ if (autoRefresh) {
 
 document.querySelectorAll('.priority-select').forEach(select => {
     select.addEventListener('change', () => select.form.requestSubmit());
+});
+
+function renderSecondaryAddresses(card, addresses, error = '') {
+    const list = card.querySelector('.secondary-list');
+    if (!list) return;
+    card.querySelector('.secondary-count').textContent = error ? '?' : String(addresses.length);
+    const readError = card.querySelector('.secondary-read-error');
+    if (readError) { readError.textContent = error; readError.hidden = !error; }
+    list.replaceChildren();
+    for (const address of addresses) {
+        const row = document.createElement('div');
+        row.className = 'secondary-row';
+        const check = document.createElement('span');
+        check.className = 'secondary-check'; check.textContent = address.active ? '✓' : '…';
+        check.setAttribute('aria-hidden', 'true'); row.append(check);
+        for (const [value, className] of [[address.ip, 'secondary-ip'], [`/${address.prefix}`, 'secondary-prefix'], [address.active ? 'Active' : 'Pending / unavailable', 'secondary-state']]) {
+            const span = document.createElement('span'); span.className = className; span.textContent = value; row.append(span);
+        }
+        const button = document.createElement('button');
+        button.type = 'button'; button.className = 'secondary-remove'; button.disabled = !address.removable;
+        button.setAttribute('aria-label', `Remove secondary IP ${address.ip}`);
+        button.innerHTML = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></svg>';
+        button.addEventListener('click', () => {
+            if (window.confirm(`Remove secondary IP ${address.ip}/${address.prefix}?`)) {
+                const payload = new FormData(card.querySelector('.secondary-form'));
+                payload.set('ip', address.ip); payload.set('operation', 'remove');
+                submitSecondaryAddress(card, payload);
+            }
+        });
+        row.append(button); list.append(row);
+    }
+}
+
+async function submitSecondaryAddress(card, payload) {
+    if (card.classList.contains('is-busy')) return;
+    const form = card.querySelector('.secondary-form');
+    const busyCard = showNicBusyOverlay(form, 'Updating secondary IP address...');
+    try {
+        if (payload.get('operation') !== 'remove') {
+            const preview = new FormData(form);
+            preview.set('operation', 'preview');
+            const checked = await fetch(form.action, {method: 'POST', body: preview});
+            const check = await checked.json();
+            if (!check.success) throw new Error(check.message);
+            if (!window.confirm(`Add ${payload.get('ip')} as a temporary secondary IP?\n\n${check.message}`)) return;
+        }
+        const response = await fetch(form.action, {method: 'POST', body: payload});
+        const result = await response.json();
+        showOperationNotice(result.message, result.success ? 'success' : 'error');
+        if (result.success && payload.get('operation') !== 'remove') { form.reset(); form.hidden = true; }
+    } catch (error) { showOperationNotice(error.message, 'error'); }
+    finally { hideNicBusyOverlay(busyCard); startNicRefreshBurst(); }
+}
+
+document.querySelectorAll('.secondary-addresses').forEach(section => {
+    const card = section.closest('.nic-card');
+    const form = section.querySelector('.secondary-form');
+    renderSecondaryAddresses(card, JSON.parse(section.querySelector('.secondary-initial').textContent), section.querySelector('.secondary-read-error').textContent);
+    section.querySelector('.secondary-open').addEventListener('click', () => { form.hidden = false; form.elements.ip.focus(); });
+    section.querySelector('.secondary-cancel').addEventListener('click', () => { form.hidden = true; });
+    form.addEventListener('submit', event => {
+        event.preventDefault();
+        submitSecondaryAddress(card, new FormData(form));
+    });
 });

@@ -1,3 +1,4 @@
+{% from 'icons.html' import icon %}
 <!doctype html>
 <html lang="en">
 <head>
@@ -56,13 +57,13 @@
             <div id="headerNavPanel" class="header-nav-panel">
                 {% block header_actions %}{% endblock %}
                 <div class="primary-nav">
-                    <a class="nav-link{% if current_endpoint == 'main.index' %} active{% endif %}" href="{{ url_for('main.index') }}"{% if current_endpoint == 'main.index' %} aria-current="page"{% endif %}>NICs</a>
-                    <a class="nav-link{% if current_endpoint == 'main.ip_scan_page' %} active{% endif %}" href="{{ url_for('main.ip_scan_page') }}"{% if current_endpoint == 'main.ip_scan_page' %} aria-current="page"{% endif %}>IP Scan</a>
-                    <a class="nav-link{% if current_endpoint == 'main.ping_page' %} active{% endif %}" href="{{ url_for('main.ping_page') }}"{% if current_endpoint == 'main.ping_page' %} aria-current="page"{% endif %}>Ping</a>
-                    <a class="nav-link{% if current_endpoint == 'main.connection_test_page' %} active{% endif %}" href="{{ url_for('main.connection_test_page') }}"{% if current_endpoint == 'main.connection_test_page' %} aria-current="page"{% endif %}>Connect</a>
+                    <a class="nav-link{% if current_endpoint == 'main.index' %} active{% endif %}" href="{{ url_for('main.index') }}"{% if current_endpoint == 'main.index' %} aria-current="page"{% endif %}>{{ icon('network') }} NICs</a>
+                    <a class="nav-link{% if current_endpoint == 'main.ip_scan_page' %} active{% endif %}" href="{{ url_for('main.ip_scan_page') }}"{% if current_endpoint == 'main.ip_scan_page' %} aria-current="page"{% endif %}>{{ icon('scan') }} IP Scan</a>
+                    <a class="nav-link{% if current_endpoint == 'main.ping_page' %} active{% endif %}" href="{{ url_for('main.ping_page') }}"{% if current_endpoint == 'main.ping_page' %} aria-current="page"{% endif %}>{{ icon('ping') }} Ping</a>
+                    <a class="nav-link{% if current_endpoint == 'main.connection_test_page' %} active{% endif %}" href="{{ url_for('main.connection_test_page') }}"{% if current_endpoint == 'main.connection_test_page' %} aria-current="page"{% endif %}>{{ icon('connect') }} Connect</a>
                 </div>
                 <details class="more-nav">
-                    <summary class="nav-link{% if current_endpoint in more_endpoints %} active{% endif %}">More <span aria-hidden="true">&#9662;</span></summary>
+                    <summary class="nav-link{% if current_endpoint in more_endpoints %} active{% endif %}">{{ icon('more') }} More <span aria-hidden="true">&#9662;</span></summary>
                     <div class="more-nav-menu">
                         <a class="nav-link{% if current_endpoint == 'api_tools.page' %} active{% endif %}" href="{{ url_for('api_tools.page') }}">API Requests</a>
                         <a class="nav-link{% if current_endpoint == 'main.converter_page' %} active{% endif %}" href="{{ url_for('main.converter_page') }}">Converter</a>
@@ -72,9 +73,9 @@
                         <a class="nav-link{% if current_endpoint == 'main.wifi_scan_page' %} active{% endif %}" href="{{ url_for('main.wifi_scan_page') }}"{% if current_endpoint == 'main.wifi_scan_page' %} aria-current="page"{% endif %}>WiFi Scan</a>
                     </div>
                 </details>
-                <button class="nav-link" id="workspaceOpen" type="button">Workspaces</button>
+                <button class="nav-link" id="workspaceOpen" type="button">{{ icon('workspace') }} Workspaces</button>
                 <button id="themeToggle" class="theme-toggle" type="button">
-                    <span class="theme-toggle-icon" aria-hidden="true">&#9680;</span>
+                    <span class="theme-toggle-icon" aria-hidden="true">{{ icon('sun') }}</span>
                     <span class="theme-toggle-label visually-hidden">Theme: Auto</span>
                 </button>
             </div>

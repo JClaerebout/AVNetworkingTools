@@ -56,7 +56,7 @@ class RequestProtectionTests(unittest.TestCase):
     def test_native_forms_render_tokens(self, _nics):
         response = self.client.get("/")
         self.assertEqual(response.status_code,200)
-        self.assertEqual(response.data.count(b'name="_action_token"'),5)
+        self.assertEqual(response.data.count(b'name="_action_token"'),6)
 
     def test_disconnected_nic_shows_configured_mode(self):
         nic = {"name": "Offline", "description": "USB LAN", "if_index": 1,

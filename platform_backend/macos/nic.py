@@ -123,6 +123,13 @@ def get_nics():
                        "status": "disconnected" if not connected or disabled else "dhcp_no_lease" if dhcp and not ip else "dhcp" if dhcp else "static",
                        "ip": ip, "prefix": "", "subnet": subnet, "gateway": gateway,
                        "dns": dns, "dns1": dns[0] if dns else "", "dns2": dns[1] if len(dns) > 1 else ""})
+    from secondary_ip import mac_addresses
+    for nic in result:
+        try:
+            nic['secondary_ips'] = mac_addresses(nic['device'], nic['ip'])
+            nic['secondary_safe'] = bool(nic['ip'])
+        except Exception as exc:
+            nic.update(secondary_ips=[], secondary_safe=False, secondary_error=str(exc))
     return result
 
 
@@ -243,10 +250,16 @@ def renew_dhcp(name):
 def restore_previous_config(name):
     previous = get_previous_config(name)
     if not previous:
-        return False, "No previous settings are available for this service."
-    if previous["dhcp_raw"] == "Enabled":
-        return set_dhcp(name)
-    return set_static(name, previous["ip"], previous["subnet"], previous["gateway"], previous["dns"])
+        return False, "No previous settings are available for this interface."
+    if previous.get('dhcp_raw') == 'Enabled':
+        ok, message = set_dhcp(name)
+    else:
+        ok, message = set_static(name, previous['ip'], previous['subnet'], previous.get('gateway', ''), previous.get('dns', []))
+    if not ok:
+        return ok, message
+    from secondary_ip import restore_secondary
+    restored, detail = restore_secondary(name, previous)
+    return restored, message + detail
 
 
 def set_interface_metric(index, metric):

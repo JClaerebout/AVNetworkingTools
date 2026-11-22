@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 
+{% from 'icons.html' import icon %}
 {% block content %}
     <div class="nic-page-toolbar">
         <div class="nic-refresh-controls">
@@ -7,7 +8,7 @@
                 <input id="autoRefresh" type="checkbox">
                 Auto refresh (10 sec)
             </label>
-            <a class="btn secondary" href="{{ url_for('main.index') }}">Refresh</a>
+            <a class="btn secondary" href="{{ url_for('main.index') }}">{{ icon('refresh') }} Refresh</a>
         </div>
 
         <div class="notification-area">
@@ -26,7 +27,7 @@
     <div class="top-note">Not running as Administrator. Windows will block IP changes without elevated rights.</div>
     {% endif %}
 
-    <div class="grid">
+    <div class="grid nic-grid">
         {% for nic in nics %}
         <div class="card nic-card" data-interface-index="{{ nic.if_index }}">
             <div class="nic-card-overlay" aria-live="polite" aria-hidden="true">
@@ -35,8 +36,7 @@
                     <span>Applying network changes...</span>
                 </div>
             </div>
-            <h2>{{ nic.name }}</h2>
-            <div class="desc">{{ nic.description }}</div>
+            <div class="nic-heading">{{ icon('wifi' if 'wi-fi' in nic.name|lower or 'wifi' in nic.name|lower or 'wireless' in nic.description|lower or 'wlan' in nic.name|lower else 'ethernet', 'adapter-icon') }}<div><h2>{{ nic.name }}</h2><div class="desc">{{ nic.description }}</div></div></div>
             <div class="status {{ nic.status }}">{{ nic.status }}</div>
 
             <div class="details">
@@ -120,6 +120,24 @@
                     <button class="btn secondary dhcp-action" type="submit" form="renew-{{ loop.index }}" {% if nic.dhcp_raw != 'Enabled' %}hidden{% endif %}>Renew</button>
                 </div>
             </form>
+
+            <details class="secondary-addresses">
+                <summary>Secondary IP addresses (<span class="secondary-count">{{ '?' if nic.secondary_error else nic.secondary_ips|default([])|length }}</span>)</summary>
+                <p class="flash error secondary-read-error" {% if not nic.secondary_error %}hidden{% endif %}>{{ nic.secondary_error|default('') }}</p>
+                <div class="secondary-list"></div>
+                <button type="button" class="btn secondary secondary-open">{{ icon('plus') }} Add secondary IP</button>
+                <form class="secondary-form" action="{{ url_for('main.secondary_address') }}" method="post" hidden>
+                    <input type="hidden" name="_action_token" value="{{ action_token }}">
+                    <input type="hidden" name="interface_index" value="{{ nic.if_index }}">
+                    <input type="hidden" name="interface" value="{{ nic.name }}">
+                    <label>IP address<input name="ip" required placeholder="192.168.0.100" autocomplete="off"></label>
+                    <label>Subnet mask<input name="subnet" required value="255.255.255.0" autocomplete="off"></label>
+                    <button type="button" class="btn secondary secondary-cancel">Cancel</button>
+                    <button class="btn" type="submit">Add IP</button>
+                </form>
+                <script type="application/json" class="secondary-initial">{{ nic.secondary_ips|default([])|tojson }}</script>
+                <p class="hint">Temporary addresses may be removed by reboot or reconnect. Verify the address is unused before adding.</p>
+            </details>
 
             <form id="restore-{{ loop.index }}" method="post" action="{{ url_for('main.restore_network') }}">
                 <input type="hidden" name="_action_token" value="{{ action_token }}">

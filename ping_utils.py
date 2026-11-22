@@ -61,9 +61,12 @@ def validate_ip(value: str) -> tuple[bool, str]:
 
 
 def _ping_command(ip: str) -> List[str]:
+    from secondary_ip import source_for_target
+    source = source_for_target(ip)
+    binding = ['-S', source] if source and sys.platform in ('win32', 'darwin') else []
     if sys.platform == "win32":
-        return ["ping", "-t", ip]
-    return ["ping", ip]
+        return ["ping", "-t", *binding, ip]
+    return ["ping", *binding, ip]
 
 
 def _reader_thread(process: subprocess.Popen, target: str) -> None:

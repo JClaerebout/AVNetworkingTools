@@ -69,3 +69,33 @@ Workspace drafts and the latest IP/WiFi scan results, Connect/Ping logs, and Scr
 ### Test device APIs
 
 Open **More > API Requests** for HTTP(S) requests or standard WebSocket text messages. Set the full URL, headers, optional Basic/Bearer authentication, and a text or JSON body. HTTP results show status, timing, headers, and readable JSON. Redirects are displayed without following them. WebSockets remain connected across page navigation; disconnect explicitly before changing workspace. TLS verification is enabled by default; disable it only when testing a trusted device with a self-signed certificate. Saved setups belong to the workspace and retain only protocol, server origin, method, authentication type, timeout and TLS setting. Re-enter paths, queries, headers, message bodies and credentials after loading. The selected protocol and connection options follow the workspace. Request paths, queries, headers, message bodies and credentials are not saved as drafts. HTTP responses and WebSocket message logs are stored locally with workspace checkpoints and saved workspaces; they may contain sensitive device data. Reloading restores results with requests stopped and WebSockets disconnected. This tool does not implement Socket.IO or OAuth login flows.
+
+### Secondary IPv4 addresses
+
+Expand **Secondary IP addresses** at the bottom of a NIC card to add or remove a
+static alias independently of Apply. The primary DHCP/static address, gateway,
+DNS and priority are retained. Use an unused unicast host address and contiguous
+subnet mask. Overlapping subnets can create ambiguous routes; conflict detection
+cannot establish that an address is unused on every network.
+
+Windows uses native IP Helper `CreateUnicastIpAddressEntry` with `SkipAsSource`,
+not `New-NetIPAddress` (which disables DHCP). macOS uses `ifconfig` aliases and
+the existing administrator authorization prompt. Addresses are temporary and may
+vanish on reboot, adapter reset or reconnect. The list always reads the OS; it is
+not a workspace preset and missing addresses are never recreated automatically.
+Restore previous includes captured secondary addresses when explicitly confirmed.
+Ambiguous addresses cannot be removed through the app.
+
+IP Scan lists active secondary subnets as additional source choices. Ping to a
+literal IPv4 target binds the secondary address when it is the unique most-specific
+local subnet match; hostname targets retain normal OS source selection. Other
+tools continue using their existing source selection.
+
+Native Windows ABI and operations have mocked coverage. Real DHCP lease renewal,
+network hardware, route behavior, reconnects and conflict handling require testing
+on both operating systems before deployment.
+
+Native API references: [Windows IP Helper address creation](https://learn.microsoft.com/en-us/windows/win32/api/netioapi/nf-netioapi-createunicastipaddressentry)
+and [New-NetIPAddress DHCP behavior](https://learn.microsoft.com/en-us/powershell/module/nettcpip/new-netipaddress).
+Windows `SkipAsSource` means other applications may need an explicit source binding;
+the app provides this for the secondary IP Scan choices and literal IPv4 Ping targets.

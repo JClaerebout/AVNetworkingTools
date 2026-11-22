@@ -60,7 +60,16 @@ _mdns_lock = threading.Lock()
 def get_scannable_nics() -> List[Dict]:
     nics = []
 
+    candidates = []
     for nic in get_nics():
+        candidates.append(nic)
+        for alias in nic.get('secondary_ips', []):
+            if alias.get('active'):
+                item = dict(nic)
+                item.update(name=f"{nic['name']} — {alias['ip']}/{alias['prefix']}",
+                            ip=alias['ip'], subnet=str(ipaddress.IPv4Network(f"0.0.0.0/{alias['prefix']}").netmask))
+                candidates.append(item)
+    for nic in candidates:
         ip = nic.get("ip") or ""
         subnet = nic.get("subnet") or ""
 

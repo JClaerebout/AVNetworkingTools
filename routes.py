@@ -907,3 +907,13 @@ def list_workspaces():
     from workspace_state import saved_workspaces, read_section
     return jsonify(workspaces=sorted(saved_workspaces(), key=str.casefold),
                    current_name=read_section("current_name") or "new workspace")
+
+
+@main_bp.route('/nics/secondary', methods=['POST'])
+def secondary_address():
+    from secondary_ip import change_secondary
+    success, message = change_secondary(request.form.get('interface_index'),
+        request.form.get('ip', ''), request.form.get('subnet', ''),
+        request.form.get('operation') == 'remove', preview=request.form.get('operation') == 'preview',
+        expected_name=request.form.get('interface'))
+    return jsonify(success=success, message=message), 200 if success else 400
