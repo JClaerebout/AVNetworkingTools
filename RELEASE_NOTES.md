@@ -5,13 +5,11 @@
 - Import saved scripts and Connect setups from other workspaces, with a new name when needed. Explicit library saves remain available after switching workspaces.
 - Send multiple selected IP Scan devices to a new or existing script block without leaving the scan.
 - Save HTTP and WebSocket connection options, completed results and logs with workspaces. Restored connections stay stopped; request contents and credentials are excluded from field drafts.
-- Refresh the NIC card layout and icons, and allow extra startup time for Windows adapter enumeration in packaged smoke checks.
+- Refresh the NIC card layout and icons.
 
-## Packages and validation
+## Packages
 
 Windows x64: `AVNetworkingTools.exe`. macOS Apple Silicon: `AVNetworkingTools-macOS-arm64.dmg`. No Intel Mac package is included.
-
-Both platforms passed automated Python and JavaScript checks and packaged startup, page navigation, cancelled Save As, and shutdown smoke checks. The macOS suite skips six Windows-specific tests. Desktop interaction and real network hardware validation on both platforms were confirmed by the maintainer.
 
 The macOS package is ad-hoc signed, without Apple Developer ID signing or notarization, and Gatekeeper may block it. Packet capture and direct ARP need BPF access on macOS; direct ARP needs Npcap on Windows. Wi-Fi details on macOS require Location Services permission. See BUILDING.md for setup and distribution requirements.
 
@@ -24,12 +22,9 @@ The macOS package is ad-hoc signed, without Apple Developer ID signing or notari
 - Page keyboard shortcuts: Enter applies or starts the relevant action, and Escape stops or disconnects.
 - Automatic free loopback port selection and an independent single-instance lock to avoid conflicts with other desktop applications.
 - More reliable handling of tentative Windows IP addresses before reporting a conflict.
-- Corrected platform assumptions in automated tests, including a Windows Wi-Fi test that could hang on macOS.
 
-## Packages and validation
+## Packages
 
 Windows x64: `AVNetworkingTools.exe`. macOS Apple Silicon: `AVNetworkingTools-macOS-arm64.dmg`. No Intel Mac package is included.
-
-Both packages passed packaged startup, page navigation, cancelled Save As, and shutdown smoke checks. The Windows Python suite and JavaScript checks passed. The macOS Python suite passed with six Windows network API tests skipped; macOS backend tests ran. Desktop and network validation on both platforms was confirmed by the maintainer.
 
 The macOS package is ad-hoc signed, without Apple Developer ID signing or notarization, and Gatekeeper may block it. Packet capture and direct ARP need BPF access on macOS; direct ARP needs Npcap on Windows. Wi-Fi details on macOS require Location Services permission. See BUILDING.md for setup and distribution requirements.
