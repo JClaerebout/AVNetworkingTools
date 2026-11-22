@@ -11,7 +11,7 @@
 
 Windows x64: `AVNetworkingTools.exe`. macOS Apple Silicon: `AVNetworkingTools-macOS-arm64.dmg`. No Intel Mac package is included.
 
-Both platforms passed automated Python and JavaScript checks and packaged startup, page navigation, cancelled Save As, and shutdown smoke checks. The macOS suite skips six Windows-specific tests. Desktop interaction and real network hardware validation were not performed for this release.
+Both platforms passed automated Python and JavaScript checks and packaged startup, page navigation, cancelled Save As, and shutdown smoke checks. The macOS suite skips six Windows-specific tests. Desktop interaction and real network hardware validation on both platforms were confirmed by the maintainer.
 
 The macOS package is ad-hoc signed, without Apple Developer ID signing or notarization, and Gatekeeper may block it. Packet capture and direct ARP need BPF access on macOS; direct ARP needs Npcap on Windows. Wi-Fi details on macOS require Location Services permission. See BUILDING.md for setup and distribution requirements.
 
