@@ -39,6 +39,11 @@ def clean_draft(key, value):
         if not isinstance(blocks, list) or any(not isinstance(block, dict) for block in blocks):
             raise ValueError("Invalid script")
         value = json.dumps([{**block, "password": ""} for block in blocks])
+    elif key == "avNetworkingTools:nic-order:v1":
+        order = json.loads(value)
+        if not isinstance(order, list) or any(not isinstance(item, str) for item in order):
+            raise ValueError("Invalid NIC order")
+        value = json.dumps(list(dict.fromkeys(order)))
     elif key not in {"avNetworkingTools:connection-send-rows", "avNetworkingTools:theme", "autoRefreshEnabled"}:
         raise ValueError("Unknown draft")
     return value
@@ -235,6 +240,14 @@ def update_workspace_list(path, valid, update, *, backup_new=False):
             if new is None:
                 return None, result
             libraries[key] = new
+            # Explicit library saves must remain available after switching away,
+            # without overwriting the workspace's saved fields or runtime snapshot.
+            if key in {"script_history.json", "connection_history.json"}:
+                import copy
+                current = next((item["value"] for item in records if item.get("name") == "current_name"), None)
+                workspaces = next((item["value"] for item in records if item.get("name") == "workspaces"), {})
+                if current in workspaces:
+                    workspaces[current].setdefault("libraries", {})[key] = copy.deepcopy(new)
             return records, result
         return update_list(STATE_FILE, lambda item: isinstance(item, dict), transaction,
                            backup_new=backup_new)

@@ -23,7 +23,8 @@ def run(desktop_app, result_file):
         if not window_url:
             raise AssertionError("Desktop window was not created")
         for route in ("/", "/ip-scan", "/connection-test", "/multicast"):
-            with urlopen(window_url + route, timeout=5) as response:
+            # Cold Windows WMI/PowerShell adapter enumeration can exceed five seconds.
+            with urlopen(window_url + route, timeout=30) as response:
                 body = response.read()
                 if response.status != 200 or b"<html" not in body.lower():
                     raise AssertionError(f"Navigation failed: {route}")

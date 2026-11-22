@@ -1,0 +1,12 @@
+<dialog id="workspaceImportDialog">
+    <h2>Import from another workspace</h2>
+    <p>Copy a saved item into this workspace. Source workspaces remain unchanged.</p>
+    <label for="workspaceImportItem">Available saves</label>
+    <select id="workspaceImportItem"></select>
+    <label for="workspaceImportName">Import as</label>
+    <input id="workspaceImportName" type="text" maxlength="80">
+    <p id="workspaceImportStatus" role="status" aria-live="polite"></p>
+    <button id="workspaceImportConfirm" class="btn" type="button">Import</button>
+    <button id="workspaceImportClose" class="btn secondary" type="button">Close</button>
+</dialog>
+<script src="{{ url_for('static', filename='workspace_import.js') }}"></script>

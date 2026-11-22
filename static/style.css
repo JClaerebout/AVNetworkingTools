@@ -1675,6 +1675,11 @@ html[data-theme="light"] .workspace-dialog { background: #f3f5f7; color: #1f2933
 .nic-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
 .nic-heading { display: flex; gap: 20px; align-items: center; padding-right: 85px; }
 .nic-heading h2 { margin: 0 0 3px; }
+.nic-drag-handle { float: left; margin: 0 10px 0 0; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--text); cursor: grab; font-size: 22px; line-height: 1; }
+.nic-drag-handle:active { cursor: grabbing; }
+.nic-drag-handle:focus-visible { outline: 2px solid var(--accent, #389bff); outline-offset: 2px; }
+.nic-card.is-dragging { opacity: .5; }
+.nic-card.is-drop-target { outline: 2px dashed var(--accent, #389bff); outline-offset: 3px; }
 .adapter-icon { color: var(--accent, #389bff); width: 38px; height: 38px; }
 .nic-card > .status { position: absolute; right: 18px; top: 22px; }
 .nic-card .details { margin-top: 16px; border: 1px solid var(--line); border-radius: 9px; padding: 12px; }

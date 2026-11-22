@@ -220,6 +220,10 @@
         }
     }
 
+    document.addEventListener('workspace-library-imported', event => {
+        if (event.detail.kind === 'scripts') refreshSavedScripts(event.detail.name);
+    });
+
     async function loadSavedScript() {
         if (!savedSelect.value) return;
         const response = await fetch(urls.entryUrl.replace("__NAME__", encodeURIComponent(savedSelect.value)));

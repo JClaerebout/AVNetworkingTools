@@ -464,7 +464,7 @@ async function refreshNicStatus() {
         if (document.body.dataset.platform === 'macos') {
             const shown = Array.from(document.querySelectorAll('.nic-card'), card => card.dataset.interfaceIndex);
             const connected = data.nics.map(nic => String(nic.if_index));
-            if (shown.length !== connected.length || shown.some((index, position) => index !== connected[position])) {
+            if (shown.length !== connected.length || shown.some(index => !connected.includes(index))) {
                 if (!document.querySelector('.secondary-form:not([hidden])')) window.location.reload();
                 return;
             }

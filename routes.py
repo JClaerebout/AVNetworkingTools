@@ -917,3 +917,45 @@ def secondary_address():
         request.form.get('operation') == 'remove', preview=request.form.get('operation') == 'preview',
         expected_name=request.form.get('interface'))
     return jsonify(success=success, message=message), 200 if success else 400
+
+
+@main_bp.get("/api/workspace-import/<kind>")
+def workspace_import_list(kind):
+    from workspace_state import saved_workspaces, read_section
+    keys = {"scripts": "script_history.json", "connect": "connection_history.json"}
+    if kind not in keys:
+        return jsonify(success=False, message="Unknown library."), 400
+    current = read_section("current_name")
+    items = [{"workspace": workspace, "name": entry["name"]}
+             for workspace, saved in saved_workspaces().items() if workspace != current
+             for entry in saved.get("libraries", {}).get(keys[kind], [])
+             if isinstance(entry, dict) and isinstance(entry.get("name"), str)]
+    return jsonify(items=items)
+
+
+@main_bp.post("/api/workspace-import/<kind>")
+def workspace_import_save(kind):
+    import copy
+    from workspace_state import saved_workspaces, read_section, _workspace_lock
+    keys = {"scripts": "script_history.json", "connect": "connection_history.json"}
+    if kind not in keys:
+        return jsonify(success=False, message="Unknown library."), 400
+    data = request.get_json(silent=True) or {}
+    with _workspace_lock:
+        source = data.get("workspace")
+        if not isinstance(source, str) or source == read_section("current_name"):
+            return jsonify(success=False, message="Select another saved workspace."), 400
+        saved = saved_workspaces().get(source, {})
+        entry = next((copy.deepcopy(item) for item in saved.get("libraries", {}).get(keys[kind], [])
+                      if isinstance(item, dict) and item.get("name") == data.get("name")), None)
+        if entry is None:
+            return jsonify(success=False, message="Saved item no longer exists."), 404
+        name = data.get("new_name", entry["name"])
+        if not isinstance(name, str) or not name.strip() or len(name.strip()) > 80:
+            return jsonify(success=False, message="Enter a name between 1 and 80 characters."), 400
+        if kind == "scripts":
+            success, message = save_script(name, entry.get("blocks", []), overwrite=False)
+        else:
+            entry["name"] = name.strip()
+            success, message = save_connection_history_entry(entry, overwrite=False)
+    return jsonify(success=success, message=message)

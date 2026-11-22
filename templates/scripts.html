@@ -25,6 +25,7 @@
             </div>
             <button id="loadScript" class="btn secondary" type="button" disabled>Load</button>
             <button id="saveScript" class="btn secondary" type="button">Save as...</button>
+            <button class="btn secondary" type="button" data-workspace-import="scripts">Import from workspace…</button>
             <button id="deleteScript" class="btn secondary" type="button" disabled>Delete</button>
             <span id="scriptSaveStatus" class="export-status" role="status" aria-live="polite"></span>
         </div>
@@ -145,6 +146,7 @@
 {% endblock %}
 
 {% block scripts %}
+{% include "workspace_import.html" %}
 <script src="{{ url_for('static', filename='log_view.js') }}?v=2"></script>
 <script
     src="{{ url_for('static', filename='scripts.js') }}?v=keyboard-reorder-1"

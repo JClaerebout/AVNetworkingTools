@@ -6,10 +6,11 @@ from version import APP_VERSION
 STATE_FILE = BASE_DIR / "release_notes_seen.json"
 # Keep these highlights short and update them with each release.
 RELEASE_NOTES = (
-    "Test HTTP(S) APIs and WebSocket text messages from More > API Requests.",
-    "Save and reload workspaces, including previous network settings.",
-    "Review Wi-Fi channel conflicts and download a report.",
-    "Spot newly discovered devices while monitoring an IP scan.",
+    "Add and remove temporary secondary IPv4 addresses on network adapters.",
+    "Drag NIC cards into your preferred order, saved with each workspace.",
+    "Import saved scripts and Connect setups from other workspaces.",
+    "Send selected IP Scan devices to a script and keep working in the scan.",
+    "Restore HTTP and WebSocket connection options, results and logs with your workspace.",
 )
 
 

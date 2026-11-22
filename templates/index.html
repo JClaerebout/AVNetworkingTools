@@ -29,7 +29,8 @@
 
     <div class="grid nic-grid">
         {% for nic in nics %}
-        <div class="card nic-card" data-interface-index="{{ nic.if_index }}">
+        <div class="card nic-card" data-interface-index="{{ nic.if_index }}" data-order-key="{{ nic.name }}">
+            <button class="nic-drag-handle" type="button" draggable="true" aria-label="Reorder {{ nic.name }}" title="Drag to reorder; use arrow keys to move">⠿</button>
             <div class="nic-card-overlay" aria-live="polite" aria-hidden="true">
                 <div class="nic-card-progress" role="status">
                     <span class="spinner" aria-hidden="true"></span>
@@ -154,4 +155,7 @@
         </div>
         {% endfor %}
     </div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='nic_order.js') }}?v=1"></script>
 {% endblock %}

@@ -51,6 +51,7 @@
         </div>
         <div>
             <label>&nbsp;</label>
+            <button class="btn secondary" type="button" data-workspace-import="connect">Import from workspace…</button>
             <button id="saveConnectionHistory" class="btn secondary" type="button">Save</button>
         </div>
         <div id="serialFields" class="row" style="display:none;">
@@ -174,6 +175,7 @@
 {% endblock %}
 
 {% block scripts %}
+{% include "workspace_import.html" %}
 <script src="{{ url_for('static', filename='connection_presets.js') }}?v=working-list-2"></script>
 <script src="{{ url_for('static', filename='log_view.js') }}?v=2"></script>
 <script

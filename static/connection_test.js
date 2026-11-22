@@ -390,6 +390,10 @@
         };
     }
 
+    document.addEventListener('workspace-library-imported', event => {
+        if (event.detail.kind === 'connect') loadConnectionHistory();
+    });
+
     async function loadConnectionHistory() {
         const response = await fetch(urls.historyUrl);
         const data = await response.json();

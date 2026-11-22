@@ -25,6 +25,8 @@ On the home page, select a network adapter and choose DHCP or enter a static IPv
 
 ### Find and test devices
 
+Drag the handle on a NIC card to change its display order, or focus the handle and use the arrow keys. The order is saved per workspace. In **Scripts** and **Connect**, use **Import from workspace…** to copy a saved script or connection setup from another workspace.
+
 In **IP Scan**, choose an adapter and start a quick scan for reachable addresses and MAC data. Use **Lookup details** after the scan to add hostnames, manufacturers, and web services without repeating the address sweep. A complete scan performs those lookups automatically. You can monitor devices for changes and export scan results to CSV. Use a device’s **Actions > Add to script** (or right-click) to update the script draft without leaving IP Scan. The first IP fills the first target block; if that block already contains targets, choose to append to it or create a new target block. Open Scripts when ready to review or run the draft.
 
 On macOS, the home page shows network service order instead of a Windows metric. Changing network settings requests administrator authorization for that operation.

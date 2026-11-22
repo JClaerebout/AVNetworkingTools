@@ -10,6 +10,14 @@ from http_test_support import authorized_client
 
 
 class WorkspaceTests(unittest.TestCase):
+    def test_nic_order_draft_validation(self):
+        key = 'avNetworkingTools:nic-order:v1'
+        self.assertEqual(json.loads(workspace.clean_draft(key, '["Wi-Fi", "Ethernet", "Wi-Fi"]')),
+                         ['Wi-Fi', 'Ethernet'])
+        for value in ['{}', '[1]', '[null]']:
+            with self.assertRaises(ValueError):
+                workspace.clean_draft(key, value)
+
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
@@ -20,6 +28,67 @@ class WorkspaceTests(unittest.TestCase):
         directory_override = patch.object(workspace, "BASE_DIR", Path(self.directory.name))
         directory_override.start()
         self.addCleanup(directory_override.stop)
+
+    def test_import_other_workspace_libraries_without_overwriting(self):
+        import copy
+        for module, attribute, filename in [
+            ('script_history', 'SCRIPT_HISTORY_FILE', 'script_history.json'),
+            ('connection_history', 'CONNECTION_HISTORY_FILE', 'connection_history.json')
+        ]:
+            override = patch(module + '.' + attribute, Path(self.directory.name) / filename)
+            override.start()
+            self.addCleanup(override.stop)
+        libraries = {
+            'script_history.json': [{'name': 'Power', 'blocks': [
+                {'type': 'target', 'targets': '192.0.2.1', 'protocol': 'tcp', 'port': 23},
+                {'type': 'command', 'value': 'ON'}]}],
+            'connection_history.json': [{'name': 'Commands', 'protocol': 'tcp', 'port': 23}]
+        }
+        workspace.workspace_libraries()
+        workspace.write_section('workspaces', {'Source': {'libraries': libraries}})
+        workspace.write_section('current_name', 'Destination')
+        original = copy.deepcopy(workspace.saved_workspaces())
+        client = authorized_client(app.create_app())
+        for kind, key in [('scripts', 'script_history.json'), ('connect', 'connection_history.json')]:
+            item = {'workspace': 'Source', 'name': libraries[key][0]['name']}
+            self.assertEqual(client.get('/api/workspace-import/' + kind).json['items'], [item])
+            self.assertTrue(client.post('/api/workspace-import/' + kind, json=item).json['success'])
+            self.assertEqual(client.post('/api/workspace-import/' + kind, json=item).json['message'], 'NAME_EXISTS')
+            self.assertTrue(client.post('/api/workspace-import/' + kind, json={**item, 'new_name': 'Copy'}).json['success'])
+            self.assertEqual(len(workspace.workspace_libraries()[key]), 2)
+            self.assertEqual(client.post('/api/workspace-import/' + kind, json={**item, 'workspace': 'Missing'}).status_code, 404)
+        self.assertEqual(workspace.saved_workspaces(), original)
+        workspace.write_section('current_name', 'Source')
+        self.assertEqual(client.get('/api/workspace-import/scripts').json['items'], [])
+
+    def test_item_saved_after_workspace_save_is_available_for_import(self):
+        import copy
+        workspace.workspace_libraries()
+        client = authorized_client(app.create_app())
+        with patch('activity_utils.get_active_tasks', return_value=[]), \
+             patch.object(workspace, 'snapshot_runtime'), \
+             patch.object(workspace, 'restore_runtime'):
+            workspace.write_section('drafts', {'before': 'saved'})
+            workspace.workspace_action('save', 'Source')
+            snapshot = copy.deepcopy(workspace.saved_workspaces()['Source'])
+            workspace.write_section('drafts', {'after': 'unsaved'})
+            for module, attribute, filename, kind, endpoint, payload in [
+                ('connection_history', 'CONNECTION_HISTORY_FILE', 'connection_history.json', 'connect',
+                 '/connection-test/history/save', {'name': 'Test connect', 'protocol': 'tcp', 'port': 23}),
+                ('script_history', 'SCRIPT_HISTORY_FILE', 'script_history.json', 'scripts',
+                 '/scripts/save', {'name': 'Test script', 'blocks': [
+                     {'type': 'target', 'targets': '192.0.2.1', 'protocol': 'tcp', 'port': 23},
+                     {'type': 'command', 'value': 'ON'}]})
+            ]:
+                with patch(module + '.' + attribute, workspace.BASE_DIR / filename):
+                    self.assertTrue(client.post(endpoint, json=payload).json['success'])
+                self.assertEqual(workspace.saved_workspaces()['Source']['drafts'], snapshot['drafts'])
+            workspace.workspace_action('new')
+            for kind, name in [('connect', 'Test connect'), ('scripts', 'Test script')]:
+                self.assertEqual(client.get('/api/workspace-import/' + kind).json['items'],
+                                 [{'workspace': 'Source', 'name': name}])
+            workspace.workspace_action('reload', 'Source')
+            self.assertEqual(workspace.workspace_libraries()['connection_history.json'][0]['name'], 'Test connect')
 
     def test_previous_network_settings_survive_restart_and_workspace_reload(self):
         from previous_config import remember_config, get_previous_config
