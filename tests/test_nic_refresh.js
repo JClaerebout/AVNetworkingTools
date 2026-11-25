@@ -4,22 +4,36 @@ const vm = require('node:vm');
 const source = fs.readFileSync('static/app.js', 'utf8');
 let requests = 0;
 let busy = false;
+let layout;
 const intervals = [];
 const timeouts = [];
 const control = {checked: true, addEventListener() {}};
+const grid = {
+    dataset: {statusUrl: '/nics/status', nicLayout: 'cached-layout'},
+    inert: true,
+    addEventListener() {},
+    querySelectorAll: () => [],
+    removeAttribute(name) { if (name === 'inert') this.inert = false; },
+};
 const context = {
     document: {
         hidden: false, body: {dataset: {}},
-        querySelector: () => busy,
+        querySelector: selector => selector === '.nic-grid' ? grid : busy,
         querySelectorAll: () => [],
         getElementById: () => control,
         addEventListener() {},
     },
+    URL,
+    window: {location: {href: 'http://localhost/'}},
     localStorage: {getItem: () => null},
     setInterval: (fn, delay) => intervals.push({fn, delay}),
     setTimeout: (fn, delay) => timeouts.push({fn, delay}),
     clearTimeout() {},
-    fetch: async () => { requests++; return {ok: true, json: async () => ({nics: []})}; },
+    fetch: async url => {
+        requests++;
+        layout = url.searchParams.get('layout');
+        return {ok: true, json: async () => ({nics: [], layout: 'current-layout'})};
+    },
 };
 vm.createContext(context);
 vm.runInContext(source.slice(source.indexOf('let nicRefreshInFlight')), context);
@@ -35,6 +49,9 @@ vm.runInContext(source.slice(source.indexOf('let nicRefreshInFlight')), context)
     busy = false;
     await context.refreshNicStatus();
     assert.equal(requests, 1);
+    assert.equal(layout, 'cached-layout');
+    assert.equal(grid.dataset.nicLayout, 'current-layout');
+    assert.equal(grid.inert, false);
     context.startNicRefreshBurst();
     await new Promise(resolve => setImmediate(resolve));
     for (let i = 0; i < 5; i++) {

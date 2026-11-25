@@ -62,6 +62,21 @@ class RequestProtectionTests(unittest.TestCase):
         self.assertEqual(cards.status_code, 200)
         self.assertEqual(cards.data.count(b'name="_action_token"'), 6)
         get_nics.assert_called_once()
+        layout = cards.headers["X-NIC-Layout"]
+        cached = self.client.get("/")
+        self.assertIn(b'data-order-key="Offline"', cached.data)
+        self.assertIn(f'data-nic-layout="{layout}"'.encode(), cached.data)
+        self.assertNotIn(b'data-adapter-url="/nics/cards"', cached.data)
+        get_nics.assert_called_once()
+
+        unchanged = self.client.get("/nics/status", query_string={"layout": layout}).get_json()
+        self.assertNotIn("cards", unchanged)
+        get_nics.return_value = []
+        changed = self.client.get("/nics/status", query_string={"layout": layout}).get_json()
+        self.assertNotEqual(changed["layout"], layout)
+        self.assertIn("No network adapters found", changed["cards"])
+        self.assertIn(b"No network adapters found", self.client.get("/").data)
+        self.assertEqual(get_nics.call_count, 3)
 
     def test_disconnected_nic_shows_configured_mode(self):
         nic = {"name": "Offline", "description": "USB LAN", "if_index": 1,

@@ -1,5 +1,5 @@
-{% macro adapter_loading() %}
-<div id="adapterLoading" class="actions">
+{% macro adapter_loading(cached=false) %}
+<div id="adapterLoading" class="actions"{% if cached %} hidden{% endif %}>
     <span class="hint" role="status">Loading network adapters…</span>
     <button class="btn secondary" type="button" hidden>Retry</button>
 </div>

@@ -6,11 +6,8 @@ from version import APP_VERSION
 STATE_FILE = BASE_DIR / "release_notes_seen.json"
 # Keep these highlights short and update them with each release.
 RELEASE_NOTES = (
-    "Use Ping, Traceroute or Combined mode in Network Diagnostics to track latency, packet loss and route changes.",
-    "Choose a primary or secondary IPv4 source, copy routes and export diagnostics as TXT or CSV.",
-    "Import saved HTTP and WebSocket setups from other workspaces.",
-    "Open NICs, IP Scan and Multicast while adapter details load in the background.",
-    "Switch between Auto, Light and Dark with a theme icon that shows your selected mode.",
+    "Return to NICs and see the last known adapters immediately while current settings load in the background.",
+    "Refresh adapter status and detect connected or disconnected adapters without reloading the NICs page.",
 )
 
 

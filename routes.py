@@ -1,9 +1,11 @@
 import csv
+import hashlib
 import json
 import io
 import ipaddress
 import webbrowser
 import sys
+from threading import Lock
 from datetime import datetime
 from pathlib import Path
 
@@ -33,6 +35,22 @@ from activity_utils import get_active_tasks
 from learned_connection_presets import get_learned_preset, learn_preset
 
 main_bp = Blueprint("main", __name__)
+
+
+@main_bp.record_once
+def init_nic_snapshot(state):
+    state.app.extensions["nic_snapshot"] = {"lock": Lock(), "value": None}
+
+
+def _refresh_nic_snapshot():
+    cache = current_app.extensions["nic_snapshot"]
+    with cache["lock"]:
+        nics = get_nics()
+        layout = [[nic.get(key) for key in ("name", "if_index", "description", "order_count")]
+                  for nic in nics]
+        revision = hashlib.sha256(json.dumps(layout).encode()).hexdigest()
+        cache["value"] = (nics, revision)
+        return nics, revision
 
 
 @main_bp.route("/api/activity")
@@ -93,12 +111,20 @@ def update_install():
 
 @main_bp.route("/")
 def index():
-    return render_template("index.html", admin=is_admin())
+    snapshot = current_app.extensions["nic_snapshot"]["value"]
+    if snapshot is None:
+        return render_template("index.html", admin=is_admin())
+    nics, layout = snapshot
+    return render_template("index.html", admin=is_admin(), nics=nics, layout=layout,
+                           history=load_history())
 
 
 @main_bp.get("/nics/cards")
 def nic_cards():
-    return render_template("nic_cards.html", nics=get_nics(), history=load_history())
+    nics, layout = _refresh_nic_snapshot()
+    return render_template("nic_cards.html", nics=nics, history=load_history()), {
+        "X-NIC-Layout": layout,
+    }
 
 
 @main_bp.route("/apply", methods=["POST"])
@@ -131,7 +157,13 @@ def apply_settings():
 @main_bp.route("/nics/status")
 def nic_status():
     try:
-        return jsonify({"nics": get_nics()})
+        nics, layout = _refresh_nic_snapshot()
+        data = {"nics": nics}
+        if "layout" in request.args:
+            data["layout"] = layout
+            if request.args["layout"] != layout:
+                data["cards"] = render_template("nic_cards.html", nics=nics, history=load_history())
+        return jsonify(data)
     except Exception as exc:
         return jsonify({"message": f"Could not refresh NICs: {exc}"}), 500
 

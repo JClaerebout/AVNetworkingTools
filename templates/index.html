@@ -9,7 +9,7 @@
                 <input id="autoRefresh" type="checkbox">
                 Auto refresh (10 sec)
             </label>
-            <a class="btn secondary" href="{{ url_for('main.index') }}">{{ icon('refresh') }} Refresh</a>
+            <button class="btn secondary" id="refreshNics" type="button">{{ icon('refresh') }} Refresh</button>
         </div>
 
         <div class="notification-area">
@@ -21,6 +21,7 @@
                 {% endif %}
             {% endwith %}
             <div id="operationNotice" class="flash info" role="status" hidden></div>
+            <div id="nicRefreshFeedback" class="hint" role="status" hidden>Could not refresh network adapters. Try Refresh again.</div>
         </div>
     </div>
 
@@ -28,9 +29,12 @@
     <div class="top-note">Not running as Administrator. Windows will block IP changes without elevated rights.</div>
     {% endif %}
 
-    {{ adapter_loading() }}
-    <div class="grid nic-grid" data-adapter-url="{{ url_for('main.nic_cards') }}" aria-busy="true"></div>
+    {{ adapter_loading(layout is defined) }}
+    <div class="grid nic-grid" data-status-url="{{ url_for('main.nic_status') }}"
+         {% if layout is defined %}data-nic-layout="{{ layout }}" inert{% else %}data-adapter-url="{{ url_for('main.nic_cards') }}" aria-busy="true"{% endif %}>
+        {%- if layout is defined %}{% include "nic_cards.html" %}{% endif -%}
+    </div>
 {% endblock %}
 {% block scripts %}
-<script src="{{ url_for('static', filename='nic_order.js') }}?v=1"></script>
+<script src="{{ url_for('static', filename='nic_order.js') }}?v=2"></script>
 {% endblock %}

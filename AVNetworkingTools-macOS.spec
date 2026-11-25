@@ -7,7 +7,8 @@ exec((Path(SPECPATH) / "version.py").read_text(), version_info)
 app_version = version_info["APP_VERSION"]
 version_parts = app_version.split(".")
 release_version = ".".join(version_parts[:3])
-bundle_version = release_version + ("d" + version_parts[3] if len(version_parts) == 4 else "")
+development_build = int(version_parts[3]) if len(version_parts) == 4 else 0
+bundle_version = f"{release_version}d{development_build}" if development_build else release_version
 
 # Build natively for arm64 or x86_64. A universal2 build is allowed only when
 # every collected native dependency contains both slices.

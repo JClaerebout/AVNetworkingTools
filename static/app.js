@@ -271,12 +271,12 @@ function syncNicForm(card, nic) {
     const currentMode = nic.dhcp_raw === 'Enabled' ? 'dhcp' : 'static';
     const forceSync = form.dataset.syncAfterRestore === 'true';
     delete form.dataset.syncAfterRestore;
+    const hasDraft = form.dataset.modeChangePending === 'true' || form.dataset.editPending === 'true';
     if (forceSync) {
-        delete form.dataset.modeChangePending;
         delete form.dataset.editPending;
-        modeSelect.value = currentMode;
     }
     form.dataset.appliedMode = currentMode;
+    if (forceSync || !hasDraft) modeSelect.value = currentMode;
     updateModeChangeState(form);
     if (form.dataset.modeChangePending === 'true' || form.dataset.editPending === 'true') return;
 
@@ -351,6 +351,7 @@ function operationMessage(form) {
 function showNicBusyOverlay(form, message) {
     const card = form.closest('.nic-card');
     if (!card) return null;
+    nicOperationGeneration++;
 
     const overlay = card.querySelector('.nic-card-overlay');
     const progressText = card.querySelector('.nic-card-progress span:last-child');
@@ -390,7 +391,7 @@ function bindNicOperations(grid) {
     grid.querySelectorAll('.config-form, .priority-form, form[id^="release-"], form[id^="renew-"], form[id^="restore-"]').forEach(form => {
         form.addEventListener('submit', async event => {
             event.preventDefault();
-            if (form.closest('.nic-card')?.classList.contains('is-busy')) return;
+            if (nicGrid.inert || form.closest('.nic-card')?.classList.contains('is-busy')) return;
             let restoreSettings;
             if (form.id.startsWith('restore-')) {
                 try {
@@ -403,6 +404,7 @@ function bindNicOperations(grid) {
                         `Mode: Static\nIP: ${settings.ip}\nSubnet: ${settings.subnet}\nGateway: ${settings.gateway || 'None'}\nDNS: ${(settings.dns || []).join(', ') || 'None'}`;
                     restoreSettings = JSON.stringify(settings);
                     if (!window.confirm(`Restore previous settings for ${name}?\n\n${details}\n\nApply these settings?`)) return;
+                    if (!form.isConnected || form.closest('.nic-card').classList.contains('is-busy')) return;
                 } catch (error) {
                     showOperationNotice(error.message || 'Could not load previous settings.', 'error');
                     return;
@@ -438,7 +440,6 @@ function bindNicOperations(grid) {
                     }
                 }
                 hideNicBusyOverlay(busyCard);
-                if (operationSucceeded && form.classList.contains('priority-form') && document.body.dataset.platform === 'macos') { window.location.reload(); return; }
                 if (operationSucceeded) startNicRefreshBurst();
                 else if (form.classList.contains('priority-form')) refreshNicStatus();
             };
@@ -457,28 +458,51 @@ let nicRefreshInFlight = false;
 let nicBurstRemaining = 0;
 let nicBurstTimer;
 let nicBurstGeneration = 0;
+let nicOperationGeneration = 0;
 
-async function refreshNicStatus() {
+function updateNicLayout(html) {
+    const fragment = document.createElement('template');
+    fragment.innerHTML = html;
+    const fresh = Array.from(fragment.content.children);
+    const oldCards = new Map(Array.from(nicGrid.querySelectorAll('.nic-card'), card => [card.dataset.layoutKey, card]));
+    const keys = new Set(fresh.map(card => card.dataset.layoutKey));
+    for (const child of Array.from(nicGrid.children)) {
+        if (!child.matches('.nic-card') || !keys.has(child.dataset.layoutKey)) child.remove();
+    }
+    const added = fresh.filter(card => !oldCards.has(card.dataset.layoutKey));
+    nicGrid.append(...added);
+    nicGrid.dispatchEvent(new CustomEvent('adapters-loaded', {detail: added.filter(card => card.matches('.nic-card'))}));
+}
+
+function refreshAfterNicDrag() {
+    refreshNicStatus(true);
+}
+
+async function refreshNicStatus(reportError = false) {
     if (nicGrid?.dataset?.adapterUrl || document.hidden || nicRefreshInFlight || document.querySelector('.nic-card.is-busy') ||
         document.body.dataset.updateInProgress === 'true') return;
     nicRefreshInFlight = true;
+    const operationGeneration = nicOperationGeneration;
     try {
-        const response = await fetch('/nics/status', {cache: 'no-store'});
+        const url = new URL(nicGrid.dataset.statusUrl, window.location.href);
+        url.searchParams.set('layout', nicGrid.dataset.nicLayout);
+        const response = await fetch(url, {cache: 'no-store'});
         const data = await response.json();
         if (!response.ok) throw new Error(data.message || 'Could not refresh NICs.');
         // A network operation may have started while the status request was running.
-        if (document.querySelector('.nic-card.is-busy')) return;
-        if (document.body.dataset.platform === 'macos') {
-            const shown = Array.from(document.querySelectorAll('.nic-card'), card => card.dataset.interfaceIndex);
-            const connected = data.nics.map(nic => String(nic.if_index));
-            if (shown.length !== connected.length || shown.some(index => !connected.includes(index))) {
-                if (!document.querySelector('.secondary-form:not([hidden])')) window.location.reload();
+        if (operationGeneration !== nicOperationGeneration || document.querySelector('.nic-card.is-busy')) return;
+        if (data.cards !== undefined) {
+            const dragHandle = nicGrid.querySelector('.is-dragging .nic-drag-handle');
+            if (dragHandle) {
+                dragHandle.addEventListener('dragend', refreshAfterNicDrag, {once: true});
                 return;
             }
+            updateNicLayout(data.cards);
         }
+        nicGrid.dataset.nicLayout = data.layout;
+        const cards = new Map(Array.from(nicGrid.querySelectorAll('.nic-card'), card => [card.dataset.interfaceIndex, card]));
         for (const nic of data.nics) {
-            const card = Array.from(document.querySelectorAll('.nic-card'))
-                .find(item => item.dataset.interfaceIndex === String(nic.if_index));
+            const card = cards.get(String(nic.if_index));
             if (!card) continue;
             const status = card.querySelector('.status');
             status.className = `status ${nic.status}`;
@@ -507,10 +531,12 @@ async function refreshNicStatus() {
             renderSecondaryAddresses(card, nic.secondary_ips || [], nic.secondary_error || '');
             syncNicForm(card, nic);
         }
-    } catch (error) {
+        nicGrid.removeAttribute('inert');
+        const refreshFeedback = document.getElementById('nicRefreshFeedback');
+        refreshFeedback.hidden = true;
+    } catch (_error) {
         // Keep the operation result visible even if a later status refresh fails.
-        const control = document.getElementById('autoRefresh');
-        if (control) control.title = error.message;
+        if (reportError || nicGrid.inert) document.getElementById('nicRefreshFeedback').hidden = false;
     } finally {
         nicRefreshInFlight = false;
     }
@@ -543,7 +569,7 @@ if (autoRefresh) {
         if (autoRefresh.checked && nicBurstRemaining === 0) refreshNicStatus();
     }, 10000);
     document.addEventListener('visibilitychange', () => {
-        if (!document.hidden && autoRefresh.checked) refreshNicStatus();
+        if (!document.hidden && (nicGrid.inert || autoRefresh.checked)) refreshNicStatus();
     });
 }
 
@@ -621,10 +647,14 @@ function bindSecondaryAddresses(grid) {
 
 const nicGrid = document.querySelector('.nic-grid');
 if (nicGrid) {
-    nicGrid.addEventListener('adapters-loaded', () => {
-        bindNicConfigForms(nicGrid);
-        bindNicOperations(nicGrid);
-        bindNicPriority(nicGrid);
-        bindSecondaryAddresses(nicGrid);
+    document.getElementById('refreshNics').addEventListener('click', () => refreshNicStatus(true));
+    nicGrid.addEventListener('adapters-loaded', event => {
+        for (const scope of event.detail || [nicGrid]) {
+            bindNicConfigForms(scope);
+            bindNicOperations(scope);
+            bindNicPriority(scope);
+            bindSecondaryAddresses(scope);
+        }
+        if (!event.detail && nicGrid.inert) refreshNicStatus();
     });
 }

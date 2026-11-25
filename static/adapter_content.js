@@ -1,5 +1,5 @@
 (() => {
-    const target = document.querySelector('[data-adapter-url]');
+    const target = document.querySelector('[data-adapter-url], .nic-grid');
     const loading = document.getElementById('adapterLoading');
     const status = loading.querySelector('[role="status"]');
     const retry = loading.querySelector('button');
@@ -12,6 +12,8 @@
             const response = await fetch(target.dataset.adapterUrl);
             if (!response.ok) throw new Error('Could not load network adapters.');
             target.innerHTML = await response.text();
+            const layout = response.headers.get('X-NIC-Layout');
+            if (layout) target.dataset.nicLayout = layout;
         } catch (_error) {
             target.removeAttribute('aria-busy');
             status.textContent = 'Could not load network adapters.';
@@ -26,5 +28,9 @@
     }
 
     retry.addEventListener('click', loadAdapters);
-    loadAdapters();
+    if (target.dataset.adapterUrl) loadAdapters();
+    else {
+        loading.hidden = true;
+        target.dispatchEvent(new Event('adapters-loaded'));
+    }
 })();

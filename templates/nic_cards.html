@@ -1,6 +1,7 @@
 {% from 'icons.html' import icon %}
 {% for nic in nics %}
-<div class="card nic-card" data-interface-index="{{ nic.if_index }}" data-order-key="{{ nic.name }}">
+<div class="card nic-card" data-interface-index="{{ nic.if_index }}" data-order-key="{{ nic.name }}"
+     data-layout-key="{{ [nic.name, nic.if_index, nic.description|default(''), nic.order_count|default(0)]|tojson|forceescape }}">
     <button class="nic-drag-handle" type="button" draggable="true" aria-label="Reorder {{ nic.name }}" title="Drag to reorder; use arrow keys to move">⠿</button>
     <div class="nic-card-overlay" aria-live="polite" aria-hidden="true">
         <div class="nic-card-progress" role="status">
@@ -87,9 +88,9 @@
 
         <div class="actions">
             <button class="btn" type="submit">Apply</button>
-            <button class="btn secondary" type="submit" form="restore-{{ loop.index }}">Restore previous</button>
-            <button class="btn warn dhcp-action" type="submit" form="release-{{ loop.index }}" {% if macos or nic.dhcp_raw != 'Enabled' %}hidden{% endif %}>Release</button>
-            <button class="btn secondary dhcp-action" type="submit" form="renew-{{ loop.index }}" {% if nic.dhcp_raw != 'Enabled' %}hidden{% endif %}>Renew</button>
+            <button class="btn secondary" type="submit" form="restore-{{ nic.if_index }}">Restore previous</button>
+            <button class="btn warn dhcp-action" type="submit" form="release-{{ nic.if_index }}" {% if macos or nic.dhcp_raw != 'Enabled' %}hidden{% endif %}>Release</button>
+            <button class="btn secondary dhcp-action" type="submit" form="renew-{{ nic.if_index }}" {% if nic.dhcp_raw != 'Enabled' %}hidden{% endif %}>Renew</button>
         </div>
     </form>
 
@@ -111,15 +112,15 @@
         <p class="hint">Temporary addresses may be removed by reboot or reconnect. Verify the address is unused before adding.</p>
     </details>
 
-    <form id="restore-{{ loop.index }}" method="post" action="{{ url_for('main.restore_network') }}">
+    <form id="restore-{{ nic.if_index }}" method="post" action="{{ url_for('main.restore_network') }}">
         <input type="hidden" name="_action_token" value="{{ action_token }}">
         <input type="hidden" name="interface" value="{{ nic.name }}">
     </form>
-    <form id="release-{{ loop.index }}" method="post" action="{{ url_for('main.dhcp_release') }}">
+    <form id="release-{{ nic.if_index }}" method="post" action="{{ url_for('main.dhcp_release') }}">
         <input type="hidden" name="_action_token" value="{{ action_token }}">
         <input type="hidden" name="interface" value="{{ nic.name }}">
     </form>
-    <form id="renew-{{ loop.index }}" method="post" action="{{ url_for('main.dhcp_renew') }}">
+    <form id="renew-{{ nic.if_index }}" method="post" action="{{ url_for('main.dhcp_renew') }}">
         <input type="hidden" name="_action_token" value="{{ action_token }}">
         <input type="hidden" name="interface" value="{{ nic.name }}">
     </form>

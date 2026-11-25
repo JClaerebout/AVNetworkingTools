@@ -1,7 +1,6 @@
 // Card order is a workspace preference shared by the desktop platforms.
-const orderedNicGrid = document.querySelector('.nic-grid');
-orderedNicGrid.addEventListener('adapters-loaded', () => {
-    const grid = orderedNicGrid;
+(function enableNicOrdering() {
+    const grid = document.querySelector('.nic-grid');
     const key = 'avNetworkingTools:nic-order:v1';
     const storage = window.workspaceStorage || localStorage;
     const cards = () => Array.from(grid.querySelectorAll('.nic-card'));
@@ -10,12 +9,6 @@ orderedNicGrid.addEventListener('adapters-loaded', () => {
         const value = JSON.parse(storage.getItem(key) || '[]');
         if (Array.isArray(value) && value.every(item => typeof item === 'string')) saved = value;
     } catch (_) {}
-    const initial = cards();
-    // Unknown adapters follow saved adapters, preserving their default order.
-    [...initial].sort((a, b) => {
-        const rank = card => saved.includes(card.dataset.orderKey) ? saved.indexOf(card.dataset.orderKey) : saved.length;
-        return rank(a) - rank(b);
-    }).forEach(card => grid.append(card));
     let dragged = null;
     function clearTargets() {
         cards().forEach(card => card.classList.remove('is-drop-target'));
@@ -28,7 +21,7 @@ orderedNicGrid.addEventListener('adapters-loaded', () => {
         saved.push(...visible.slice(index));
         try { storage.setItem(key, JSON.stringify(saved)); } catch (_) {}
     }
-    cards().forEach(card => {
+    function bindCard(card) {
         const handle = card.querySelector('.nic-drag-handle');
         handle.addEventListener('dragstart', event => {
             if (card.classList.contains('is-busy')) { event.preventDefault(); return; }
@@ -72,5 +65,17 @@ orderedNicGrid.addEventListener('adapters-loaded', () => {
             handle.focus();
             save();
         });
+    }
+    grid.addEventListener('adapters-loaded', event => {
+        const initial = cards();
+        // Unknown adapters follow saved adapters, preserving their default order.
+        const rank = card => saved.includes(card.dataset.orderKey) ? saved.indexOf(card.dataset.orderKey) : saved.length;
+        const ordered = [...initial].sort((a, b) => rank(a) - rank(b));
+        if (ordered.some((card, index) => card !== initial[index])) {
+            const focused = document.activeElement;
+            ordered.forEach(card => grid.append(card));
+            if (focused && grid.contains(focused)) focused.focus({preventScroll: true});
+        }
+        (event?.detail || initial).forEach(bindCard);
     });
-});
+})();
