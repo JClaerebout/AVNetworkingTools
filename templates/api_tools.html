@@ -35,7 +35,12 @@
         <p class="hint">Saves protocol, server origin, method, authentication type, timeout and TLS setting in this workspace. Re-enter the path, query, headers, body and credentials after loading.</p>
         <label for="apiSetupName">Setup name</label><input id="apiSetupName" maxlength="100" data-sensitive>
         <label for="apiSetup">Saved setup</label><select id="apiSetup" data-no-draft></select>
-        <div class="actions"><button class="btn secondary" id="apiSave" type="button">Save</button><button class="btn secondary" id="apiLoad" type="button">Load</button><button class="btn secondary" id="apiDelete" type="button">Delete</button></div>
+        <div class="actions">
+            <button class="btn secondary" id="apiSave" type="button">Save</button>
+            <button class="btn secondary" id="apiLoad" type="button">Load</button>
+            <button class="btn secondary" id="apiDelete" type="button">Delete</button>
+            <button class="btn secondary" id="apiImport" type="button" data-workspace-import="http" data-import-name-limit="100">Import from workspace…</button>
+        </div>
     </details>
 </section>
 <section class="card">
@@ -45,4 +50,7 @@
     <pre id="apiOutput" class="ping-output" style="white-space:pre-wrap;overflow-wrap:anywhere">No results yet.</pre>
 </section>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='api_tools.js') }}?v=protocol-separation-1"></script>{% endblock %}
+{% block scripts %}
+{% include "workspace_import.html" %}
+<script src="{{ url_for('static', filename='api_tools.js') }}?v=workspace-import-1"></script>
+{% endblock %}

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from 'adapter_loading.html' import adapter_loading %}
 
 {% block title %}IP Scan - AVNetworkingTools{% endblock %}
 {% block subtitle %}Scan the subnet of a selected NIC and list discovered IP, MAC and manufacturer.{% endblock %}
@@ -8,25 +9,13 @@
     <h2>IP Scan</h2>
     <p class="desc">Select a connected NIC. The app scans that NIC's IPv4 subnet and reads the ARP table for discovered devices.</p>
 
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            {% for category, message in messages %}
-                <div class="flash {{ category }}">{{ message }}</div>
-            {% endfor %}
-        {% endif %}
-    {% endwith %}
-
     <div class="row scan-options-row">
         <div>
             <label>NIC / subnet</label>
-            <select id="scanNic">
+            <select id="scanNic" data-adapter-url="{{ url_for('main.scan_adapters') }}" aria-busy="true" disabled>
                 <option value="">Select NIC...</option>
-                {% for nic in nics %}
-                <option value="{{ nic.name }}">
-                    {{ nic.name }} - {{ nic.ip }} / {{ nic.subnet }} - {{ nic.network }}
-                </option>
-                {% endfor %}
             </select>
+            {{ adapter_loading() }}
             <div class="desc">NIC is still used as the source interface.</div>
         </div>
         <div>
@@ -41,7 +30,7 @@
     </div>
 
     <div class="actions">
-        <button id="startScan" class="btn" type="button">Start Scan</button>
+        <button id="startScan" class="btn" type="button" disabled>Start Scan</button>
         <button id="lookupDetails" class="btn secondary" type="button" style="display:none;">Lookup details</button>
         <button id="stopScan" class="btn warn" type="button">Stop Scan</button>
 

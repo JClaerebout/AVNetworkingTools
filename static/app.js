@@ -4,7 +4,6 @@
     if (!toggle) return;
 
     const label = toggle.querySelector('.theme-toggle-label');
-    const icon = toggle.querySelector('.theme-toggle-icon');
     const systemPreference = window.matchMedia?.('(prefers-color-scheme: dark)');
     const preferences = ['dark', 'light', 'auto'];
 
@@ -31,8 +30,6 @@
                 ? `Theme: Auto (${theme[0].toUpperCase() + theme.slice(1)})`
                 : `Theme: ${displayPreference}`;
         }
-        if (icon) icon.dataset.theme = theme;
-
         if (!persist) return;
 
         try {
@@ -140,6 +137,7 @@
 (function preservePageFields() {
     const storageKey = `avNetworkingTools:page-fields:${window.location.pathname}`;
     const fieldSelector = 'input:not([type="password"]):not([data-sensitive]):not([type="hidden"]):not([type="file"]):not([type="button"]):not([type="submit"]), select:not([data-sensitive]):not([data-no-draft]), textarea:not([data-sensitive])';
+    const grid = document.querySelector('.nic-grid');
     // Remove password entries left by older versions, including drafts from other pages.
     try {
         for (let i = 0; i < (window.workspaceStorage || sessionStorage).length; i++) {
@@ -207,10 +205,12 @@
     }
 
     function saveAllFields() {
-        const state = {};
+        const state = grid?.dataset.adapterUrl ? {...savedFields} : {};
         document.querySelectorAll(fieldSelector).forEach(field => {
             if (field.closest('.config-form')) return;
-            state[fieldKey(field)] = fieldState(field);
+            const key = fieldKey(field);
+            const value = field.dataset?.adapterUrl ? savedFields[key] : fieldState(field);
+            if (value) state[key] = value;
         });
 
         try {
@@ -230,6 +230,9 @@
         if (event.target.matches?.(fieldSelector)) saveAllFields();
     });
     window.addEventListener('pagehide', saveAllFields);
+    grid?.addEventListener('adapters-loaded', () => {
+        grid.querySelectorAll(fieldSelector).forEach(restoreField);
+    });
 
     // Some selects, such as connection history and COM ports, receive options asynchronously.
     new MutationObserver(mutations => {
@@ -288,39 +291,41 @@ function syncNicForm(card, nic) {
     updateStaticVisibility(form);
 }
 
-document.querySelectorAll('.config-form').forEach(form => {
-    const modeSelect = form.querySelector('.mode-select');
-    const historySelect = form.querySelector('.history-select');
+function bindNicConfigForms(grid) {
+    grid.querySelectorAll('.config-form').forEach(form => {
+        const modeSelect = form.querySelector('.mode-select');
+        const historySelect = form.querySelector('.history-select');
 
-    if (!modeSelect) return;
+        if (!modeSelect) return;
 
-    form.dataset.appliedMode = modeSelect.value;
-    updateStaticVisibility(form);
-
-    modeSelect.addEventListener('change', () => {
+        form.dataset.appliedMode = modeSelect.value;
         updateStaticVisibility(form);
-        updateModeChangeState(form);
-    });
-    form.querySelectorAll('.static-fields input').forEach(field => {
-        field.addEventListener('input', () => { form.dataset.editPending = 'true'; });
-    });
 
-    if (historySelect) {
-        historySelect.addEventListener('change', event => {
-            if (!event.target.value) return;
-
-            const h = JSON.parse(event.target.value);
-            form.querySelector('[name="mode"]').value = 'static';
-            form.querySelector('[name="ip"]').value = h.ip || '';
-            form.querySelector('[name="subnet"]').value = h.subnet || '';
-            form.querySelector('[name="gateway"]').value = h.gateway || '';
-            form.querySelector('[name="dns"]').value = [h.dns1, h.dns2].filter(Boolean).join(', ');
-            form.dataset.editPending = 'true';
+        modeSelect.addEventListener('change', () => {
             updateStaticVisibility(form);
             updateModeChangeState(form);
         });
-    }
-});
+        form.querySelectorAll('.static-fields input').forEach(field => {
+            field.addEventListener('input', () => { form.dataset.editPending = 'true'; });
+        });
+
+        if (historySelect) {
+            historySelect.addEventListener('change', event => {
+                if (!event.target.value) return;
+
+                const h = JSON.parse(event.target.value);
+                form.querySelector('[name="mode"]').value = 'static';
+                form.querySelector('[name="ip"]').value = h.ip || '';
+                form.querySelector('[name="subnet"]').value = h.subnet || '';
+                form.querySelector('[name="gateway"]').value = h.gateway || '';
+                form.querySelector('[name="dns"]').value = [h.dns1, h.dns2].filter(Boolean).join(', ');
+                form.dataset.editPending = 'true';
+                updateStaticVisibility(form);
+                updateModeChangeState(form);
+            });
+        }
+    });
+}
 
 function showOperationNotice(message, category = 'info') {
     const notice = document.getElementById('operationNotice');
@@ -381,70 +386,72 @@ function showResponseNotice(responseHtml) {
     }
 }
 
-document.querySelectorAll('.config-form, .priority-form, form[id^="release-"], form[id^="renew-"], form[id^="restore-"]').forEach(form => {
-    form.addEventListener('submit', async event => {
-        event.preventDefault();
-        if (form.closest('.nic-card')?.classList.contains('is-busy')) return;
-        let restoreSettings;
-        if (form.id.startsWith('restore-')) {
-            try {
-                const name = new FormData(form).get('interface');
-                const response = await fetch(`/restore-network/preview?interface=${encodeURIComponent(name)}`);
-                const settings = await response.json();
-                if (!response.ok) throw new Error(settings.message);
-                const dhcp = settings.dhcp_raw === 'Enabled';
-                const details = dhcp ? 'Mode: DHCP (automatic IP and DNS)' :
-                    `Mode: Static\nIP: ${settings.ip}\nSubnet: ${settings.subnet}\nGateway: ${settings.gateway || 'None'}\nDNS: ${(settings.dns || []).join(', ') || 'None'}`;
-                restoreSettings = JSON.stringify(settings);
-                if (!window.confirm(`Restore previous settings for ${name}?\n\n${details}\n\nApply these settings?`)) return;
-            } catch (error) {
-                showOperationNotice(error.message || 'Could not load previous settings.', 'error');
-                return;
-            }
-        }
-        const message = operationMessage(form);
-        const busyCard = showNicBusyOverlay(form, message);
-        showOperationNotice(message);
-
-        const request = new XMLHttpRequest();
-        request.open('POST', form.action, true);
-        request.onload = () => {
-            if (request.status < 200 || request.status >= 400) {
-                hideNicBusyOverlay(busyCard);
-                showOperationNotice('Network change failed. Please try again.', 'error');
-                return;
-            }
-            const operationSucceeded = showResponseNotice(request.responseText);
-            if (form.classList.contains('config-form') && operationSucceeded) {
-                form.dataset.appliedMode = form.querySelector('.mode-select').value;
-                delete form.dataset.modeChangePending;
-                delete form.dataset.editPending;
-                updateModeChangeState(form);
-            }
-            if (form.id.startsWith('restore-') && operationSucceeded) {
-                const configForm = busyCard?.querySelector('.config-form');
-                if (configForm) {
-                    delete configForm.dataset.modeChangePending;
-                    delete configForm.dataset.editPending;
-                    configForm.dataset.syncAfterRestore = 'true';
-                    const pendingLabel = configForm.querySelector('.mode-pending');
-                    if (pendingLabel) pendingLabel.hidden = true;
+function bindNicOperations(grid) {
+    grid.querySelectorAll('.config-form, .priority-form, form[id^="release-"], form[id^="renew-"], form[id^="restore-"]').forEach(form => {
+        form.addEventListener('submit', async event => {
+            event.preventDefault();
+            if (form.closest('.nic-card')?.classList.contains('is-busy')) return;
+            let restoreSettings;
+            if (form.id.startsWith('restore-')) {
+                try {
+                    const name = new FormData(form).get('interface');
+                    const response = await fetch(`/restore-network/preview?interface=${encodeURIComponent(name)}`);
+                    const settings = await response.json();
+                    if (!response.ok) throw new Error(settings.message);
+                    const dhcp = settings.dhcp_raw === 'Enabled';
+                    const details = dhcp ? 'Mode: DHCP (automatic IP and DNS)' :
+                        `Mode: Static\nIP: ${settings.ip}\nSubnet: ${settings.subnet}\nGateway: ${settings.gateway || 'None'}\nDNS: ${(settings.dns || []).join(', ') || 'None'}`;
+                    restoreSettings = JSON.stringify(settings);
+                    if (!window.confirm(`Restore previous settings for ${name}?\n\n${details}\n\nApply these settings?`)) return;
+                } catch (error) {
+                    showOperationNotice(error.message || 'Could not load previous settings.', 'error');
+                    return;
                 }
             }
-            hideNicBusyOverlay(busyCard);
-            if (operationSucceeded && form.classList.contains('priority-form') && document.body.dataset.platform === 'macos') { window.location.reload(); return; }
-            if (operationSucceeded) startNicRefreshBurst();
-            else if (form.classList.contains('priority-form')) refreshNicStatus();
-        };
-        request.onerror = () => {
-            hideNicBusyOverlay(busyCard);
-            showOperationNotice('Network change failed. Please try again.', 'error');
-        };
-        const payload = new FormData(form);
-        if (restoreSettings) payload.set("confirmed_settings", restoreSettings);
-        request.send(payload);
+            const message = operationMessage(form);
+            const busyCard = showNicBusyOverlay(form, message);
+            showOperationNotice(message);
+
+            const request = new XMLHttpRequest();
+            request.open('POST', form.action, true);
+            request.onload = () => {
+                if (request.status < 200 || request.status >= 400) {
+                    hideNicBusyOverlay(busyCard);
+                    showOperationNotice('Network change failed. Please try again.', 'error');
+                    return;
+                }
+                const operationSucceeded = showResponseNotice(request.responseText);
+                if (form.classList.contains('config-form') && operationSucceeded) {
+                    form.dataset.appliedMode = form.querySelector('.mode-select').value;
+                    delete form.dataset.modeChangePending;
+                    delete form.dataset.editPending;
+                    updateModeChangeState(form);
+                }
+                if (form.id.startsWith('restore-') && operationSucceeded) {
+                    const configForm = busyCard?.querySelector('.config-form');
+                    if (configForm) {
+                        delete configForm.dataset.modeChangePending;
+                        delete configForm.dataset.editPending;
+                        configForm.dataset.syncAfterRestore = 'true';
+                        const pendingLabel = configForm.querySelector('.mode-pending');
+                        if (pendingLabel) pendingLabel.hidden = true;
+                    }
+                }
+                hideNicBusyOverlay(busyCard);
+                if (operationSucceeded && form.classList.contains('priority-form') && document.body.dataset.platform === 'macos') { window.location.reload(); return; }
+                if (operationSucceeded) startNicRefreshBurst();
+                else if (form.classList.contains('priority-form')) refreshNicStatus();
+            };
+            request.onerror = () => {
+                hideNicBusyOverlay(busyCard);
+                showOperationNotice('Network change failed. Please try again.', 'error');
+            };
+            const payload = new FormData(form);
+            if (restoreSettings) payload.set("confirmed_settings", restoreSettings);
+            request.send(payload);
+        });
     });
-});
+}
 
 let nicRefreshInFlight = false;
 let nicBurstRemaining = 0;
@@ -452,7 +459,7 @@ let nicBurstTimer;
 let nicBurstGeneration = 0;
 
 async function refreshNicStatus() {
-    if (document.hidden || nicRefreshInFlight || document.querySelector('.nic-card.is-busy') ||
+    if (nicGrid?.dataset?.adapterUrl || document.hidden || nicRefreshInFlight || document.querySelector('.nic-card.is-busy') ||
         document.body.dataset.updateInProgress === 'true') return;
     nicRefreshInFlight = true;
     try {
@@ -540,9 +547,11 @@ if (autoRefresh) {
     });
 }
 
-document.querySelectorAll('.priority-select').forEach(select => {
-    select.addEventListener('change', () => select.form.requestSubmit());
-});
+function bindNicPriority(grid) {
+    grid.querySelectorAll('.priority-select').forEach(select => {
+        select.addEventListener('change', () => select.form.requestSubmit());
+    });
+}
 
 function renderSecondaryAddresses(card, addresses, error = '') {
     const list = card.querySelector('.secondary-list');
@@ -596,14 +605,26 @@ async function submitSecondaryAddress(card, payload) {
     finally { hideNicBusyOverlay(busyCard); startNicRefreshBurst(); }
 }
 
-document.querySelectorAll('.secondary-addresses').forEach(section => {
-    const card = section.closest('.nic-card');
-    const form = section.querySelector('.secondary-form');
-    renderSecondaryAddresses(card, JSON.parse(section.querySelector('.secondary-initial').textContent), section.querySelector('.secondary-read-error').textContent);
-    section.querySelector('.secondary-open').addEventListener('click', () => { form.hidden = false; form.elements.ip.focus(); });
-    section.querySelector('.secondary-cancel').addEventListener('click', () => { form.hidden = true; });
-    form.addEventListener('submit', event => {
-        event.preventDefault();
-        submitSecondaryAddress(card, new FormData(form));
+function bindSecondaryAddresses(grid) {
+    grid.querySelectorAll('.secondary-addresses').forEach(section => {
+        const card = section.closest('.nic-card');
+        const form = section.querySelector('.secondary-form');
+        renderSecondaryAddresses(card, JSON.parse(section.querySelector('.secondary-initial').textContent), section.querySelector('.secondary-read-error').textContent);
+        section.querySelector('.secondary-open').addEventListener('click', () => { form.hidden = false; form.elements.ip.focus(); });
+        section.querySelector('.secondary-cancel').addEventListener('click', () => { form.hidden = true; });
+        form.addEventListener('submit', event => {
+            event.preventDefault();
+            submitSecondaryAddress(card, new FormData(form));
+        });
     });
-});
+}
+
+const nicGrid = document.querySelector('.nic-grid');
+if (nicGrid) {
+    nicGrid.addEventListener('adapters-loaded', () => {
+        bindNicConfigForms(nicGrid);
+        bindNicOperations(nicGrid);
+        bindNicPriority(nicGrid);
+        bindSecondaryAddresses(nicGrid);
+    });
+}

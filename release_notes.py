@@ -6,11 +6,11 @@ from version import APP_VERSION
 STATE_FILE = BASE_DIR / "release_notes_seen.json"
 # Keep these highlights short and update them with each release.
 RELEASE_NOTES = (
-    "Add and remove temporary secondary IPv4 addresses on network adapters.",
-    "Drag NIC cards into your preferred order, saved with each workspace.",
-    "Import saved scripts and Connect setups from other workspaces.",
-    "Send selected IP Scan devices to a script and keep working in the scan.",
-    "Restore HTTP and WebSocket connection options, results and logs with your workspace.",
+    "Use Ping, Traceroute or Combined mode in Network Diagnostics to track latency, packet loss and route changes.",
+    "Choose a primary or secondary IPv4 source, copy routes and export diagnostics as TXT or CSV.",
+    "Import saved HTTP and WebSocket setups from other workspaces.",
+    "Open NICs, IP Scan and Multicast while adapter details load in the background.",
+    "Switch between Auto, Light and Dark with a theme icon that shows your selected mode.",
 )
 
 

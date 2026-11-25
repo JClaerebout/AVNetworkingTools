@@ -1,21 +1,19 @@
 {% extends "base.html" %}
 
-{% block title %}Ping - AVNetworkingTools{% endblock %}
-{% block subtitle %}Run a continuous ping test until you press Stop.{% endblock %}
+{% block title %}Network Diagnostics - AVNetworkingTools{% endblock %}
+{% block subtitle %}Measure reachability, discover IP routes, and monitor changes over time.{% endblock %}
 
 {% block content %}
 <div class="card">
-    <h2>Ping</h2>
-    <p class="desc">Enter an IP address or hostname, or select a previous target from the ping history.</p>
-
+    <h2>Network Diagnostics</h2>
     <div class="row">
         <div>
-            <label>IP address or hostname</label>
+            <label for="pingIp">IP address or hostname</label>
             <input id="pingIp" data-ip-suggestions placeholder="192.168.1.1 or switch.local" autocomplete="off">
         </div>
         <div>
-            <label>Ping history</label>
-            <select id="pingHistory">
+            <label for="pingHistory">Recent targets</label>
+            <select id="pingHistory" data-no-draft>
                 <option value="">Select previous target...</option>
                 {% for ip in ping_history %}
                 <option value="{{ ip }}">{{ ip }}</option>
@@ -23,31 +21,107 @@
             </select>
         </div>
     </div>
+    <div class="row">
+        <div>
+            <label for="pingMode">Mode</label>
+            <select id="pingMode">
+                <option value="ping">Ping</option>
+                <option value="trace">Traceroute</option>
+                <option value="combined">Combined</option>
+            </select>
+        </div>
+        <div>
+            <label for="pingSource">Adapter and source IPv4</label>
+            <div class="diagnostics-source">
+                <select id="pingSource" data-no-draft><option value="auto">Automatic routing</option></select>
+                <button id="pingRefreshSources" class="btn secondary" type="button">Refresh</button>
+            </div>
+            <p id="pingSourceStatus" class="hint" role="status"></p>
+        </div>
+    </div>
+    <div class="diagnostics-options">
+        <div id="pingIntervalField">
+            <label for="pingInterval">Ping interval (ms)</label>
+            <input id="pingInterval" type="number" min="250" max="60000" step="1" value="1000" required>
+        </div>
+        <div>
+            <label for="pingTimeout">Timeout (ms)</label>
+            <input id="pingTimeout" type="number" min="100" max="5000" step="1" value="1000" required>
+        </div>
+        <div id="pingHopLimitField" hidden>
+            <label for="pingHopLimit">Maximum hops</label>
+            <input id="pingHopLimit" type="number" min="1" max="64" step="1" value="30" required>
+        </div>
+        <div id="pingHopIntervalField" hidden>
+            <label for="pingHopInterval">Time between hop probes (ms)</label>
+            <input id="pingHopInterval" type="number" min="500" max="60000" step="1" value="2000" required>
+        </div>
+    </div>
 
     <div class="actions">
-        <button id="startPing" class="btn" type="button">Start Ping</button>
-        <button id="stopPing" class="btn warn" type="button">Stop Ping</button>
-        <span id="pingExportStatus" class="export-status" role="status" aria-live="polite"></span>
-        <button id="downloadPingTxt" class="btn secondary" type="button" disabled>Download TXT</button>
-        <span id="pingState" class="desc">Stopped</span>
+        <button id="startPing" class="btn" type="button">Start</button>
+        <button id="stopPing" class="btn warn" type="button" disabled>Stop</button>
+        <button id="clearPing" class="btn secondary" type="button" disabled>Clear results</button>
+        <span id="pingState" class="desc" role="status">Ready</span>
     </div>
-    <p id="pingRequestStatus" class="hint" role="status" aria-live="polite"></p>
+    <p id="pingRequestStatus" class="hint" role="status"></p>
+</div>
 
-    <div class="log-toolbar">
-        <strong>Result</strong>
-        <button id="pingLogLatest" class="btn secondary" type="button">Latest</button>
+<div class="card">
+    <h2 id="pingResultsHeading">Results</h2>
+    <p id="pingRouteNote" class="hint" hidden></p>
+    <dl id="pingSummary" class="diagnostics-summary">
+        {% for id, label in [('Reachability', 'Destination'), ('Last', 'Last'), ('Best', 'Min'), ('Avg', 'Avg'), ('Worst', 'Max'), ('Loss', 'Loss'), ('Sent', 'Sent'), ('Received', 'Received'), ('HopCount', 'Responding hops')] %}
+        <div><dt>{{ label }}</dt><dd id="ping{{ id }}">—</dd></div>
+        {% endfor %}
+    </dl>
+    <div id="pingChartPanel" hidden>
+        <h3>Recent destination latency</h3>
+        <canvas id="pingChart" role="img" aria-label="Recent destination latency graph. Current latency and packet counts are shown above."></canvas>
     </div>
-    <pre id="pingOutput" class="ping-output">No ping running.</pre>
+
+    <section id="pingRoutePanel" hidden>
+        <h3>Route</h3>
+        <p id="pingProgress" class="hint"></p>
+        <div class="table-wrap" tabindex="0" aria-label="Route results">
+            <table class="result-table diagnostics-table">
+                <thead><tr>
+                    <th scope="col">Hop</th><th scope="col">IP / Hostname</th><th scope="col">Loss %</th>
+                    <th scope="col">Sent</th><th scope="col">Received</th><th scope="col">Last (ms)</th>
+                    <th scope="col">Avg (ms)</th><th scope="col">Best (ms)</th><th scope="col">Worst (ms)</th>
+                </tr></thead>
+                <tbody id="pingHops"></tbody>
+            </table>
+        </div>
+        <p class="hint">Ordinary Layer 2 switches do not appear in IP traceroute. A router may rate-limit ICMP replies while still forwarding traffic.</p>
+    </section>
+
+    <details id="pingLog" open>
+        <summary>Log</summary>
+        <div class="log-toolbar">
+            <button id="pingLogLatest" class="btn secondary" type="button">Latest</button>
+        </div>
+        <pre id="pingOutput" class="ping-output">No output yet.</pre>
+    </details>
+    <div class="actions">
+        <button id="copyPingRoute" class="btn secondary" type="button" hidden disabled>Copy route</button>
+        <button id="downloadPingTxt" class="btn secondary" type="button" disabled>Download TXT</button>
+        <button id="downloadPingCsv" class="btn secondary" type="button" disabled>Download CSV</button>
+        <span id="pingExportStatus" class="export-status" role="status"></span>
+    </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='log_view.js') }}?v=2"></script>
 <script
-    src="{{ url_for('static', filename='ping.js') }}?v=log-view-1"
+    src="{{ url_for('static', filename='ping.js') }}?v=diagnostics-1"
     data-status-url="{{ url_for('main.ping_status') }}"
     data-start-url="{{ url_for('main.ping_start') }}"
     data-stop-url="{{ url_for('main.ping_stop') }}"
+    data-clear-url="{{ url_for('main.ping_clear') }}"
+    data-sources-url="{{ url_for('main.ping_sources') }}"
     data-export-url="{{ url_for('main.ping_export') }}"
+    data-csv-url="{{ url_for('main.ping_export_csv') }}"
 ></script>
 {% endblock %}

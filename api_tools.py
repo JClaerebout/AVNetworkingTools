@@ -243,23 +243,31 @@ def clear(mode=None):
             _events.clear()
 
 
-def saved_setups(data=None):
-    from workspace_state import read_section, write_section
+SETUP_FIELDS = ('mode', 'method', 'timeout', 'verify', 'auth')
+
+
+def saved_setups(data=None, *, overwrite=True):
+    from workspace_state import read_section, update_api_setups
     if data is None:
         return read_section('api_setups') or {}
     name = data.get('name', '')
     if not isinstance(name, str) or not name.strip() or len(name) > 100:
         raise ValueError('Enter a setup name (1–100 characters).')
     # Explicit allowlist. URLs/bodies/headers can all embed secrets, so never persist them.
-    setup = {key: data[key] for key in ('mode', 'method', 'timeout', 'verify', 'auth') if key in data}
+    setup = {key: data[key] for key in SETUP_FIELDS if key in data}
     if not data.get('delete'):
         url, _, _, _ = settings(data, websocket=data.get('mode') == 'ws')
         parsed = urlsplit(url)
         setup['origin'] = parsed.scheme + '://' + parsed.netloc
-    setups = saved_setups()
-    if data.get('delete'):
-        setups.pop(name.strip(), None)
-    else:
-        setups[name.strip()] = setup
-    write_section('api_setups', setups)
-    return setups
+    name = name.strip()
+
+    def update(setups):
+        if data.get('delete'):
+            setups.pop(name, None)
+        elif overwrite or name not in setups:
+            setups[name] = setup
+        else:
+            return False
+        return True
+
+    return update_api_setups(update)

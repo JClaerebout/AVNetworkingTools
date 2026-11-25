@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('[data-workspace-import]').forEach(button => {
         button.addEventListener('click', async () => {
             kind = button.dataset.workspaceImport;
+            name.maxLength = Number(button.dataset.importNameLimit || 80);
             list.replaceChildren(); name.value = ''; submit.disabled = true;
             status.textContent = 'Loading available saves…'; dialog.showModal();
             try {

@@ -1,0 +1,4 @@
+<option value="">{{ "Select interface..." if nics else "No eligible adapters found" }}</option>
+{% for nic in nics %}
+<option value="{{ nic.name }}">{{ nic.name }} - {{ nic.ip }}</option>
+{% endfor %}

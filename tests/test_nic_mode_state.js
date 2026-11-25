@@ -10,7 +10,7 @@ const mode = {value: 'static', name: 'mode', type: 'select-one', tagName: 'SELEC
     classList: ['mode-select'], closest: selector => selector === '.config-form' ? {} : null};
 const context = {
     window: {location: {pathname: '/'}, addEventListener(name, callback) { events[name] = callback; }},
-    document: {body: {}, forms: [], addEventListener() {}, querySelectorAll: () => [mode]},
+    document: {body: {}, forms: [], addEventListener() {}, querySelector: () => null, querySelectorAll: () => [mode]},
     sessionStorage: {get length() { return stored.size; }, key: i => [...stored.keys()][i],
         getItem: k => stored.get(k) || null, setItem: (k, v) => stored.set(k, v)},
     MutationObserver: class {observe() {}}, HTMLSelectElement: class {}

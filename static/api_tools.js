@@ -33,6 +33,7 @@
             el('apiVerify').dispatchEvent(new Event('change'));
         }
         mode = value;
+        el('apiImport').dataset.workspaceImport = mode;
         changingMode = false;
         saveDrafts();
         document.querySelectorAll('[data-mode]').forEach(button => {
@@ -148,6 +149,14 @@
         if (!name || !confirm(`Delete setup “${name}”?`)) return;
         try { list(await call('setups', {name, delete: true})); }
         catch (error) { el('apiState').textContent = error.message; }
+    });
+    document.addEventListener('workspace-library-imported', async event => {
+        const {kind, name} = event.detail;
+        if (kind !== 'http' && kind !== 'ws') return;
+        try {
+            list(await call('setups'));
+            el('apiSetup').value = name;
+        } catch (error) { el('apiState').textContent = error.message; }
     });
     call('setups').then(list).catch(error => { el('apiState').textContent = error.message; });
     // Global draft restoration runs on DOMContentLoaded; reflect restored settings afterwards.

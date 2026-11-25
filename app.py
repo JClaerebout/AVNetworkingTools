@@ -31,10 +31,10 @@ def create_app() -> Flask:
     from api_routes import api_bp
     app.register_blueprint(api_bp)
 
-    @app.context_processor
+    @app.template_global()
     def workspace_drafts():
         from workspace_state import read_section
-        return {"workspace_drafts": read_section("drafts")}
+        return read_section("drafts")
 
     @app.get("/_instance_health")
     def instance_health():

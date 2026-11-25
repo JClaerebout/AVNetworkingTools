@@ -53,10 +53,15 @@ class RequestProtectionTests(unittest.TestCase):
         self.assertEqual(response.headers["X-Frame-Options"],"DENY")
 
     @patch("routes.get_nics",return_value=[{"name":"Offline","if_index":1,"dns":[],"status":"static"}])
-    def test_native_forms_render_tokens(self, _nics):
+    def test_nic_cards_load_separately_and_render_form_tokens(self, get_nics):
         response = self.client.get("/")
-        self.assertEqual(response.status_code,200)
-        self.assertEqual(response.data.count(b'name="_action_token"'),6)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'data-adapter-url="/nics/cards"', response.data)
+        get_nics.assert_not_called()
+        cards = self.client.get("/nics/cards")
+        self.assertEqual(cards.status_code, 200)
+        self.assertEqual(cards.data.count(b'name="_action_token"'), 6)
+        get_nics.assert_called_once()
 
     def test_disconnected_nic_shows_configured_mode(self):
         nic = {"name": "Offline", "description": "USB LAN", "if_index": 1,
@@ -64,7 +69,7 @@ class RequestProtectionTests(unittest.TestCase):
                "dhcp_raw": "Enabled", "link_status": "Disconnected", "dns": [],
                "ip": "", "subnet": "", "gateway": "", "mac": ""}
         with patch("routes.get_nics", return_value=[nic]):
-            page = self.client.get("/").get_data(as_text=True)
+            page = self.client.get("/nics/cards").get_data(as_text=True)
         self.assertIn('<option value="dhcp" selected>DHCP</option>', page)
         self.assertIn('>IP mode</div><div>DHCP</div>', page)
         self.assertIn('class="mode-pending" hidden', page)

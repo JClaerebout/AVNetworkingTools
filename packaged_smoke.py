@@ -22,13 +22,33 @@ def run(desktop_app, result_file):
     def inspect_window():
         if not window_url:
             raise AssertionError("Desktop window was not created")
-        for route in ("/", "/ip-scan", "/connection-test", "/multicast"):
-            # Cold Windows WMI/PowerShell adapter enumeration can exceed five seconds.
+        for route in ("/", "/ip-scan", "/ping", "/connection-test", "/multicast"):
             with urlopen(window_url + route, timeout=30) as response:
                 body = response.read()
                 if response.status != 200 or b"<html" not in body.lower():
                     raise AssertionError(f"Navigation failed: {route}")
             checks.append(route)
+
+        for route, marker in (("/nics/cards", b"nic-card"), ("/ip-scan/adapters", b"<option"),
+                              ("/multicast/adapters", b"<option")):
+            # Cold Windows WMI/PowerShell adapter enumeration can exceed five seconds.
+            with urlopen(window_url + route, timeout=30) as response:
+                body = response.read()
+                if response.status != 200 or (marker not in body and b"No network adapters found" not in body):
+                    raise AssertionError(f"Adapter controls failed to load: {route}")
+            checks.append(route)
+
+        import sys
+        from threading import Event
+        from network_probes import MacIcmp, WindowsIcmp
+        backend = WindowsIcmp if sys.platform == "win32" else MacIcmp
+        address = "127.0.0.1"
+        route = backend(address, "", "").route()
+        with backend(address, address, route.interface) as probe:
+            reply = probe.send_probe(1, 1000, Event())
+        if reply.kind != "reply" or reply.address != address or reply.ms is None:
+            raise AssertionError(f"Source-bound diagnostic probe failed: {reply}")
+        checks.append("source-bound IPv4 loopback probe")
 
         from export_utils import SaveCancelled, save_export
         fake_window = Mock()

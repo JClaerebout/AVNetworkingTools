@@ -23,6 +23,24 @@ def write_section(name, value):
     update_list(STATE_FILE, lambda item: isinstance(item, dict), update)
 
 
+def update_api_setups(update):
+    """Persist setup edits in the active and named workspace in one transaction."""
+    def transaction(records):
+        sections = {item["name"]: item["value"] for item in records if "value" in item and "name" in item}
+        setups = sections.get("api_setups", {})
+        if not update(setups):
+            return None, None
+        workspaces = sections.get("workspaces", {})
+        current = sections.get("current_name")
+        if current in workspaces:
+            workspaces[current]["api_setups"] = setups
+        records = [item for item in records if item.get("name") != "api_setups"]
+        return records + [{"name": "api_setups", "value": setups}], setups
+
+    with _workspace_lock:
+        return update_list(STATE_FILE, lambda item: isinstance(item, dict), transaction)
+
+
 def clean_draft(key, value):
     """Only accept known UI drafts; credentials never belong in field drafts."""
     import json
@@ -114,10 +132,7 @@ def restore_runtime(data=None, *, replace=False):
             connection._conn_output.clear()
             connection._session = None
         connection._conn_output.extend(data.get("connection", {}).get("output", []))
-    with ping._ping_lock:
-        if replace:
-            ping._ping_output.clear()
-        ping._ping_output.extend(data.get("ping", {}).get("output", []))
+    ping.restore_ping_status(data.get("ping", {}), replace=replace)
     with script._lock:
         if replace:
             script._state["output"].clear()

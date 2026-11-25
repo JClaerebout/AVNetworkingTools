@@ -17,7 +17,7 @@ const fields=[password,host,sensitive],events={};
 let observedSelector;
 const context={
     window:{location:{pathname:'/connection-test'},addEventListener:(event,fn)=>{events[event]=fn;}},
-    document:{body:{},addEventListener(){},querySelectorAll:selector=>{
+    document:{body:{},addEventListener(){},querySelector:()=>null,querySelectorAll:selector=>{
         observedSelector=selector;
         return fields.filter(f=>!(f.type==='password' && selector.includes(':not([type="password"])')) && !(f.sensitive && selector.includes(':not([data-sensitive])')));
     }},

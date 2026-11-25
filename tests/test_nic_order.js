@@ -11,6 +11,7 @@ function setup(saved) {
         get nextSibling() { return grid.items[grid.items.indexOf(this) + 1] || null; }
     }));
     const grid = {
+        addEventListener(event, listener) { if (event === 'adapters-loaded') listener(); },
         items: [...cards], querySelectorAll() { return this.items; },
         append(card) { this.insertBefore(card, null); },
         insertBefore(card, target) {

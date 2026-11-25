@@ -11,7 +11,8 @@ from flask import Blueprint, Response, current_app, flash, jsonify, redirect, re
 
 from previous_config import get_previous_config
 from history import load_history
-from ping_utils import get_ping_status, load_ping_history, start_ping, stop_ping
+from ping_utils import (MODES, clear_ping, diagnostics_sources, get_ping_status, load_ping_history,
+                        start_ping, stop_ping)
 from nic_utils import clean_dns, get_nics, release_dhcp, renew_dhcp, set_dhcp, set_static, set_interface_metric, restore_previous_config
 from scan_utils import get_monitor_log, get_scannable_nics, get_scan_status, start_lookup, start_scan, stop_scan, start_monitor, stop_monitor, set_monitor_paused
 from connection_utils import get_connection_status, get_serial_ports, send_data, start_connection, stop_connection
@@ -92,13 +93,12 @@ def update_install():
 
 @main_bp.route("/")
 def index():
-    try:
-        nics = get_nics()
-    except Exception as exc:
-        nics = []
-        flash(f"Could not scan NICs: {exc}", "error")
+    return render_template("index.html", admin=is_admin())
 
-    return render_template("index.html", nics=nics, history=load_history(), admin=is_admin(), macos=sys.platform == "darwin")
+
+@main_bp.get("/nics/cards")
+def nic_cards():
+    return render_template("nic_cards.html", nics=get_nics(), history=load_history())
 
 
 @main_bp.route("/apply", methods=["POST"])
@@ -210,7 +210,7 @@ def ping_start():
     ip = data.get("ip", "")
     if not isinstance(ip, str):
         return jsonify(success=False, message="IP address or hostname must be text."), 400
-    success, message = start_ping(ip)
+    success, message = start_ping(ip, data)
     return jsonify({**get_ping_status(), "success": success, "message": message})
 
 
@@ -225,6 +225,21 @@ def ping_status():
     return jsonify(get_ping_status())
 
 
+@main_bp.get("/ping/sources")
+def ping_sources():
+    try:
+        return jsonify(sources=diagnostics_sources())
+    except Exception:
+        current_app.logger.exception("Could not enumerate diagnostics adapters")
+        return jsonify(success=False, message="Could not read adapter addresses."), 503
+
+
+@main_bp.post("/ping/clear")
+def ping_clear():
+    clear_ping()
+    return jsonify(success=True, **get_ping_status())
+
+
 def _save_download(filename, content):
     return save_export(filename, content)
 
@@ -234,23 +249,84 @@ def save_cancelled(_error):
     return jsonify({"success": False, "cancelled": True, "message": "Save cancelled."})
 
 
+def _diagnostics_export_lines(status):
+    lines = status.get("output", [])
+    if not status.get("mode"):
+        return lines
+    route = status.get("route", {})
+    rows = [
+        f"Target: {status['target']}",
+        f"Destination: {status.get('destination') or '—'}",
+        f"Started: {status.get('started_at') or '—'}",
+        f"Exported: {datetime.now().astimezone().isoformat(timespec='seconds')}",
+        f"Mode: {MODES[status['mode']]}",
+        f"Adapter: {route.get('interface') or 'Automatic / unavailable'}",
+        f"Source IPv4: {route.get('source') or '—'}",
+        f"Gateway: {route.get('gateway') or '—'}",
+        f"Reachability: {status.get('reachability', 'Unknown')}",
+    ]
+    if route.get("note"):
+        rows.append(route["note"])
+    fields = ("sent", "received", "loss", "last", "avg", "best", "worst")
+    rows.extend(["", "Destination statistics (latency in ms)",
+                 ", ".join(f"{key}: {_diagnostics_value(status['stats'].get(key))}" for key in fields)])
+    if status.get("hops"):
+        rows.extend(["", "Hop | IP address | Status | Sent | Received | Loss % | Last ms | Avg ms | Best ms | Worst ms"])
+        for hop in status["hops"]:
+            values = [hop["hop"], hop["address"] or "*", hop["kind"], *(hop.get(key) for key in fields)]
+            rows.append(" | ".join(_diagnostics_value(value) for value in values))
+    return rows + ["", "Log", *lines]
+
+
+def _diagnostics_value(value):
+    if value is None:
+        return "—"
+    return f"{value:.2f}" if isinstance(value, float) else str(value)
+
+
+def _diagnostics_csv(status):
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["Timestamp", "Target", "Destination", "Mode", "Adapter", "Source IPv4",
+                     "Gateway", "Reachability", "Hop", "Responding IP", "Probe status", "Sent",
+                     "Received", "Loss %", "Last ms", "Avg ms", "Best ms", "Worst ms"])
+    route = status.get("route", {})
+    metadata = [status.get("started_at"), status.get("target"), status.get("destination"),
+                MODES.get(status.get("mode"), "Ping"), route.get("interface"), route.get("source"),
+                route.get("gateway"), status.get("reachability")]
+    rows = [{"hop": "Destination", "address": status.get("destination"), **status.get("stats", {})},
+            *status.get("hops", [])]
+    for row in rows:
+        values = [*metadata, *(row.get(key, "") for key in
+                  ("hop", "address", "kind", "sent", "received", "loss", "last", "avg", "best", "worst"))]
+        writer.writerow(["'" + value if isinstance(value, str) and value.startswith(("=", "+", "-", "@", "\t", "\r", "\n"))
+                         else value for value in values])
+    return buffer.getvalue()
+
+
 @main_bp.route("/ping/export.txt", methods=["GET", "POST"])
+@main_bp.route("/ping/export.csv", methods=["GET", "POST"], endpoint="ping_export_csv")
 def ping_export():
-    lines = get_ping_status().get("output", [])
+    status = get_ping_status()
+    is_csv = request.path.endswith(".csv")
+    lines = [] if is_csv else _diagnostics_export_lines(status)
     safe_lines = [str(line).replace("\r\n", "\n").replace("\r", "\n") for line in lines]
     content = "\r\n".join(safe_lines) if safe_lines else "No ping output available."
-    filename = f"ping-result-{datetime.now().strftime('%Y%m%d-%H%M%S')}.txt"
+    content = _diagnostics_csv(status) if is_csv else content + "\r\n"
+    extension = "csv" if is_csv else "txt"
+    prefix = "network-diagnostics" if status.get("mode") else "ping-result"
+    filename = f"{prefix}-{datetime.now().strftime('%Y%m%d-%H%M%S')}.{extension}"
 
     if request.method == "POST":
         try:
-            destination = _save_download(filename, content + "\r\n")
+            destination = _save_download(filename, content)
         except OSError as exc:
-            return jsonify({"success": False, "message": f"Could not save TXT: {exc}"}), 500
+            return jsonify({"success": False, "message": f"Could not save {extension.upper()}: {exc}"}), 500
         return jsonify({"success": True, "filename": destination.name, "path": str(destination)})
 
     return Response(
-        content + "\r\n",
-        content_type="text/plain; charset=utf-8",
+        content,
+        content_type=f"text/{'csv' if is_csv else 'plain'}; charset=utf-8",
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
             "Cache-Control": "no-store",
@@ -463,13 +539,12 @@ def connection_test_export():
 
 @main_bp.route("/ip-scan")
 def ip_scan_page():
-    try:
-        nics = get_scannable_nics()
-    except Exception as exc:
-        nics = []
-        flash(f"Could not load scan NICs: {exc}", "error")
+    return render_template("ip_scan.html")
 
-    return render_template("ip_scan.html", nics=nics)
+
+@main_bp.get("/ip-scan/adapters")
+def scan_adapters():
+    return render_template("ip_scan_adapters.html", nics=get_scannable_nics())
 
 
 @main_bp.route("/ip-scan/start", methods=["POST"])
@@ -714,12 +789,13 @@ def wifi_scan_status():
 
 @main_bp.route("/multicast")
 def multicast_page():
-    try:
-        nics = [nic for nic in get_nics() if nic.get("link_status") == "Up" and nic.get("ip")]
-    except Exception as exc:
-        nics = []
-        flash(f"Could not load network interfaces: {exc}", "error")
-    return render_template("multicast.html", nics=nics)
+    return render_template("multicast.html")
+
+
+@main_bp.get("/multicast/adapters")
+def multicast_adapters():
+    nics = [nic for nic in get_nics() if nic.get("link_status") == "Up" and nic.get("ip")]
+    return render_template("multicast_adapters.html", nics=nics)
 
 
 @main_bp.route("/multicast/start", methods=["POST"])
@@ -919,17 +995,29 @@ def secondary_address():
     return jsonify(success=success, message=message), 200 if success else 400
 
 
+_IMPORT_LIBRARY_FILES = {"scripts": "script_history.json", "connect": "connection_history.json"}
+_IMPORT_API_MODES = {"http", "ws"}
+
+
+def _workspace_import_entries(saved, kind):
+    if kind in _IMPORT_API_MODES:
+        return ((name, setup) for name, setup in saved.get("api_setups", {}).items()
+                if isinstance(setup, dict) and setup.get("mode", "http") == kind)
+    return ((entry["name"], entry) for entry in saved.get("libraries", {}).get(_IMPORT_LIBRARY_FILES[kind], [])
+            if isinstance(entry, dict) and isinstance(entry.get("name"), str))
+
+
 @main_bp.get("/api/workspace-import/<kind>")
 def workspace_import_list(kind):
-    from workspace_state import saved_workspaces, read_section
-    keys = {"scripts": "script_history.json", "connect": "connection_history.json"}
-    if kind not in keys:
+    from workspace_state import saved_workspaces, read_section, _workspace_lock
+    if kind not in _IMPORT_LIBRARY_FILES and kind not in _IMPORT_API_MODES:
         return jsonify(success=False, message="Unknown library."), 400
-    current = read_section("current_name")
-    items = [{"workspace": workspace, "name": entry["name"]}
-             for workspace, saved in saved_workspaces().items() if workspace != current
-             for entry in saved.get("libraries", {}).get(keys[kind], [])
-             if isinstance(entry, dict) and isinstance(entry.get("name"), str)]
+    with _workspace_lock:
+        workspaces = saved_workspaces()
+        current = read_section("current_name")
+        items = [{"workspace": workspace, "name": name}
+                 for workspace, saved in workspaces.items() if workspace != current
+                 for name, _ in _workspace_import_entries(saved, kind)]
     return jsonify(items=items)
 
 
@@ -937,25 +1025,37 @@ def workspace_import_list(kind):
 def workspace_import_save(kind):
     import copy
     from workspace_state import saved_workspaces, read_section, _workspace_lock
-    keys = {"scripts": "script_history.json", "connect": "connection_history.json"}
-    if kind not in keys:
+    if kind not in _IMPORT_LIBRARY_FILES and kind not in _IMPORT_API_MODES:
         return jsonify(success=False, message="Unknown library."), 400
-    data = request.get_json(silent=True) or {}
+    data = _json_object()
+    if data is None:
+        return _bad_json()
     with _workspace_lock:
         source = data.get("workspace")
         if not isinstance(source, str) or source == read_section("current_name"):
             return jsonify(success=False, message="Select another saved workspace."), 400
         saved = saved_workspaces().get(source, {})
-        entry = next((copy.deepcopy(item) for item in saved.get("libraries", {}).get(keys[kind], [])
-                      if isinstance(item, dict) and item.get("name") == data.get("name")), None)
+        source_name = data.get("name")
+        entry = next((copy.deepcopy(item) for name, item in _workspace_import_entries(saved, kind)
+                      if name == source_name), None)
         if entry is None:
             return jsonify(success=False, message="Saved item no longer exists."), 404
-        name = data.get("new_name", entry["name"])
-        if not isinstance(name, str) or not name.strip() or len(name.strip()) > 80:
-            return jsonify(success=False, message="Enter a name between 1 and 80 characters."), 400
+        name = data.get("new_name", source_name)
+        max_length = 100 if kind in _IMPORT_API_MODES else 80
+        if not isinstance(name, str) or not 1 <= len(name.strip()) <= max_length:
+            return jsonify(success=False, message=f"Enter a name between 1 and {max_length} characters."), 400
         if kind == "scripts":
             success, message = save_script(name, entry.get("blocks", []), overwrite=False)
-        else:
+        elif kind == "connect":
             entry["name"] = name.strip()
             success, message = save_connection_history_entry(entry, overwrite=False)
+        else:
+            from api_tools import SETUP_FIELDS, saved_setups
+            setup = {key: entry[key] for key in SETUP_FIELDS if key in entry}
+            setup.update(name=name.strip(), mode=kind, url=entry.get("origin", ""))
+            try:
+                success = saved_setups(setup, overwrite=False) is not None
+            except (ValueError, TypeError, OverflowError):
+                return jsonify(success=False, message="The saved setup has invalid settings."), 400
+            message = "Imported." if success else "NAME_EXISTS"
     return jsonify(success=success, message=message)

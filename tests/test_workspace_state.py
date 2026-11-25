@@ -90,6 +90,44 @@ class WorkspaceTests(unittest.TestCase):
             workspace.workspace_action('reload', 'Source')
             self.assertEqual(workspace.workspace_libraries()['connection_history.json'][0]['name'], 'Test connect')
 
+    def test_api_workspace_import_filters_protocol_and_persists_copies(self):
+        client = authorized_client(app.create_app())
+        http = {'origin': 'https://device', 'method': 'POST', 'auth': 'bearer', 'timeout': 20, 'verify': False}
+        websocket = {'origin': 'wss://device', 'mode': 'ws'}
+        long_name = 'W' * 100
+        source = {'API': {'api_setups': {'Status': http, long_name: websocket}}}
+        with patch('activity_utils.get_active_tasks', return_value=[]), \
+             patch.object(workspace, 'snapshot_runtime'), patch.object(workspace, 'restore_runtime'):
+            workspace.workspace_libraries()
+            workspace.write_section('workspaces', source)
+            workspace.workspace_action('save', 'Destination')
+            for kind, name, setup in [('http', 'Status', http), ('ws', long_name, websocket)]:
+                url = '/api/workspace-import/' + kind
+                item = {'workspace': 'API', 'name': name}
+                self.assertEqual(client.get(url).json['items'], [item])
+                other_url = '/api/workspace-import/' + ('ws' if kind == 'http' else 'http')
+                self.assertEqual(client.post(other_url, json=item).status_code, 404)
+                self.assertTrue(client.post(url, json=item).json['success'])
+                self.assertEqual(client.post(url, json=item).json['message'], 'NAME_EXISTS')
+                renamed = {**item, 'new_name': f'{kind} copy'}
+                self.assertTrue(client.post(url, json=renamed).json['success'])
+                self.assertEqual(client.get('/api-tools/setups').json['setups'][name], {**setup, 'mode': kind})
+            self.assertEqual(workspace.saved_workspaces()['API'], source['API'])
+
+            added = {'name': 'New HTTP', 'mode': 'http', 'url': 'https://device/private?token=secret'}
+            self.assertTrue(client.post('/api-tools/setups', json=added).json['success'])
+            client.post('/api-tools/setups', json={'name': 'http copy', 'delete': True})
+            workspace.workspace_action('reload', 'API')
+            self.assertEqual(client.get('/api/workspace-import/http').json['items'], [
+                {'workspace': 'Destination', 'name': 'Status'},
+                {'workspace': 'Destination', 'name': 'New HTTP'},
+            ])
+            workspace.workspace_action('reload', 'Destination')
+            setups = client.get('/api-tools/setups').json['setups']
+            self.assertNotIn('http copy', setups)
+            self.assertEqual(setups['New HTTP']['origin'], 'https://device')
+            self.assertEqual(setups['ws copy'], websocket)
+
     def test_previous_network_settings_survive_restart_and_workspace_reload(self):
         from previous_config import remember_config, get_previous_config
         settings = {"dhcp_raw": "Disabled", "ip": "192.0.2.10",

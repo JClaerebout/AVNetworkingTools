@@ -1,0 +1,128 @@
+{% from 'icons.html' import icon %}
+{% for nic in nics %}
+<div class="card nic-card" data-interface-index="{{ nic.if_index }}" data-order-key="{{ nic.name }}">
+    <button class="nic-drag-handle" type="button" draggable="true" aria-label="Reorder {{ nic.name }}" title="Drag to reorder; use arrow keys to move">⠿</button>
+    <div class="nic-card-overlay" aria-live="polite" aria-hidden="true">
+        <div class="nic-card-progress" role="status">
+            <span class="spinner" aria-hidden="true"></span>
+            <span>Applying network changes...</span>
+        </div>
+    </div>
+    <div class="nic-heading">{{ icon('wifi' if 'wi-fi' in nic.name|lower or 'wifi' in nic.name|lower or 'wireless' in nic.description|lower or 'wlan' in nic.name|lower else 'ethernet', 'adapter-icon') }}<div><h2>{{ nic.name }}</h2><div class="desc">{{ nic.description }}</div></div></div>
+    <div class="status {{ nic.status }}">{{ nic.status }}</div>
+
+    <div class="details">
+        <div class="label">IP</div><div>{{ nic.ip or '-' }}</div>
+        <div class="label">Subnet</div><div>{{ nic.subnet or '-' }}</div>
+        <div class="label">Gateway</div><div>{{ nic.gateway or '-' }}</div>
+        <div class="label">DNS</div><div>{{ nic.dns | join(', ') if nic.dns else '-' }}</div>
+        <div class="label">IP mode</div><div>{{ 'DHCP' if nic.dhcp_raw == 'Enabled' else 'Static' if nic.dhcp_raw == 'Disabled' else '-' }}</div>
+        <div class="label">Link</div><div>{{ nic.link_status }}</div>
+        <div class="label">MAC</div><div>{{ nic.mac or '-' }}</div>
+    </div>
+
+    <form class="priority-form" method="post" action="{{ url_for('main.nic_priority') }}">
+        <input type="hidden" name="_action_token" value="{{ action_token }}">
+        <input type="hidden" name="interface_index" value="{{ nic.if_index }}">
+        <label for="priority-{{ nic.if_index }}">{{ "Network Service Order" if macos else "Priority" }}</label>
+        <select id="priority-{{ nic.if_index }}" name="metric" class="priority-select" aria-label="{{ 'Service order' if macos else 'Priority' }} for {{ nic.name }}">
+            {% if nic.metric is not defined or (not nic.automatic_metric and nic.metric not in range(1, ((nic.order_count|default(nics|length)) + 1) if macos else 11)) %}
+            <option value="" disabled selected>{{ nic.metric if nic.metric is defined else 'Unknown' }}</option>
+            {% endif %}
+            {% if not macos %}<option value="auto" {% if nic.automatic_metric %}selected{% endif %}>Auto</option>{% endif %}
+            {% for priority in range(1, ((nic.order_count|default(nics|length)) + 1) if macos else 11) %}
+            <option value="{{ priority }}" {% if not nic.automatic_metric and nic.metric == priority %}selected{% endif %}>{{ priority }}</option>
+            {% endfor %}
+        </select>
+    </form>
+
+    <form class="config-form" method="post" action="{{ url_for('main.apply_settings') }}">
+        <input type="hidden" name="_action_token" value="{{ action_token }}">
+        <input type="hidden" name="interface" value="{{ nic.name }}">
+
+        <div>
+            <label>History</label>
+            <select class="history-select">
+                <option value="">Select previous static address...</option>
+                {% for h in history %}
+                    {% if h.interface == nic.name %}
+                    <option value='{{ h | tojson }}'>
+                        {{ h.ip }} / {{ h.subnet }} | GW {{ h.gateway or '-' }} | DNS {{ h.dns1 }} {{ h.dns2 }}
+                    </option>
+                    {% endif %}
+                {% endfor %}
+            </select>
+        </div>
+
+        <div>
+            <label>Mode</label>
+            <select name="mode" class="mode-select">
+                <option value="static" {% if nic.dhcp_raw != 'Enabled' %}selected{% endif %}>Static</option>
+                <option value="dhcp" {% if nic.dhcp_raw == 'Enabled' %}selected{% endif %}>DHCP</option>
+            </select>
+            <small class="mode-pending" hidden>Mode change pending — click Apply</small>
+        </div>
+
+        <div class="row static-fields">
+            <div>
+                <label>IP address</label>
+                <input name="ip" value="{{ nic.ip }}" placeholder="192.168.1.50">
+            </div>
+            <div>
+                <label>Subnet mask</label>
+                <input name="subnet" value="{{ nic.subnet }}" placeholder="255.255.255.0">
+            </div>
+        </div>
+
+        <div class="row static-fields">
+            <div>
+                <label>Gateway</label>
+                <input name="gateway" value="{{ nic.gateway }}" placeholder="192.168.1.1">
+            </div>
+            <div>
+                <label>DNS servers</label>
+                <input name="dns" value="{{ nic.dns | join(', ') }}" placeholder="1.1.1.1, 8.8.8.8">
+            </div>
+        </div>
+
+        <div class="actions">
+            <button class="btn" type="submit">Apply</button>
+            <button class="btn secondary" type="submit" form="restore-{{ loop.index }}">Restore previous</button>
+            <button class="btn warn dhcp-action" type="submit" form="release-{{ loop.index }}" {% if macos or nic.dhcp_raw != 'Enabled' %}hidden{% endif %}>Release</button>
+            <button class="btn secondary dhcp-action" type="submit" form="renew-{{ loop.index }}" {% if nic.dhcp_raw != 'Enabled' %}hidden{% endif %}>Renew</button>
+        </div>
+    </form>
+
+    <details class="secondary-addresses">
+        <summary>Secondary IP addresses (<span class="secondary-count">{{ '?' if nic.secondary_error else nic.secondary_ips|default([])|length }}</span>)</summary>
+        <p class="flash error secondary-read-error" {% if not nic.secondary_error %}hidden{% endif %}>{{ nic.secondary_error|default('') }}</p>
+        <div class="secondary-list"></div>
+        <button type="button" class="btn secondary secondary-open">{{ icon('plus') }} Add secondary IP</button>
+        <form class="secondary-form" action="{{ url_for('main.secondary_address') }}" method="post" hidden>
+            <input type="hidden" name="_action_token" value="{{ action_token }}">
+            <input type="hidden" name="interface_index" value="{{ nic.if_index }}">
+            <input type="hidden" name="interface" value="{{ nic.name }}">
+            <label>IP address<input name="ip" required placeholder="192.168.0.100" autocomplete="off"></label>
+            <label>Subnet mask<input name="subnet" required value="255.255.255.0" autocomplete="off"></label>
+            <button type="button" class="btn secondary secondary-cancel">Cancel</button>
+            <button class="btn" type="submit">Add IP</button>
+        </form>
+        <script type="application/json" class="secondary-initial">{{ nic.secondary_ips|default([])|tojson }}</script>
+        <p class="hint">Temporary addresses may be removed by reboot or reconnect. Verify the address is unused before adding.</p>
+    </details>
+
+    <form id="restore-{{ loop.index }}" method="post" action="{{ url_for('main.restore_network') }}">
+        <input type="hidden" name="_action_token" value="{{ action_token }}">
+        <input type="hidden" name="interface" value="{{ nic.name }}">
+    </form>
+    <form id="release-{{ loop.index }}" method="post" action="{{ url_for('main.dhcp_release') }}">
+        <input type="hidden" name="_action_token" value="{{ action_token }}">
+        <input type="hidden" name="interface" value="{{ nic.name }}">
+    </form>
+    <form id="renew-{{ loop.index }}" method="post" action="{{ url_for('main.dhcp_renew') }}">
+        <input type="hidden" name="_action_token" value="{{ action_token }}">
+        <input type="hidden" name="interface" value="{{ nic.name }}">
+    </form>
+</div>
+{% endfor %}
+{% if not nics %}<p class="hint">No network adapters found.</p>{% endif %}

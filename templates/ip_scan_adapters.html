@@ -1,0 +1,6 @@
+<option value="">{{ "Select NIC..." if nics else "No eligible adapters found" }}</option>
+{% for nic in nics %}
+<option value="{{ nic.name }}">
+    {{ nic.name }} - {{ nic.ip }} / {{ nic.subnet }} - {{ nic.network }}
+</option>
+{% endfor %}

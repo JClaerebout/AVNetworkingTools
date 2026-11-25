@@ -19,7 +19,7 @@ def get_active_tasks() -> list[dict]:
                  else "Monitor paused" if scan["monitor_paused"] else "Monitoring")
         tasks.append({"key": "scan", "label": f"IP Scan · {phase}", "endpoint": "main.ip_scan_page"})
     if get_ping_activity():
-        tasks.append({"key": "ping", "label": "Ping", "endpoint": "main.ping_page"})
+        tasks.append({"key": "ping", "label": "Network Diagnostics", "endpoint": "main.ping_page"})
     connection = get_connection_activity()
     if connection in {"Connecting", "Connected", "Stopping"}:
         label = "Connecting" if connection == "Connecting" else "Connection closing" if connection == "Stopping" else "Connection open"

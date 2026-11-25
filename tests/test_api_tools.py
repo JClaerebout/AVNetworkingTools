@@ -94,10 +94,15 @@ class APIIntegrationTests(unittest.TestCase):
                      {'url': 'http://localhost', 'headers': 'Host: other'},
                      {'url': 'http://localhost', 'timeout': 0}]:
             with self.assertRaises(ValueError): api.settings(data)
-        with patch('workspace_state.read_section', return_value={}), patch('workspace_state.write_section') as write:
-            api.saved_setups({'name': 'test', 'url': 'https://localhost/path?key=secret', 'password': 'secret', 'headers': 'X-Key: secret', 'body': 'secret'})
-            self.assertNotIn('secret', str(write.call_args))
-            self.assertEqual(write.call_args.args[1]['test']['origin'], 'https://localhost')
+        setups = {}
+
+        def update(change):
+            self.assertTrue(change(setups))
+            return setups
+
+        with patch('workspace_state.update_api_setups', side_effect=update):
+            saved = api.saved_setups({'name': 'test', 'url': 'https://localhost/path?key=secret', 'password': 'secret', 'headers': 'X-Key: secret', 'body': 'secret'})
+            self.assertEqual(saved, {'test': {'origin': 'https://localhost'}})
 
     def test_routes_and_native_export(self):
         from app import create_app

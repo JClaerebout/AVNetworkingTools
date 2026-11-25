@@ -1,7 +1,7 @@
 // Card order is a workspace preference shared by the desktop platforms.
-(() => {
-    const grid = document.querySelector('.nic-grid');
-    if (!grid) return;
+const orderedNicGrid = document.querySelector('.nic-grid');
+orderedNicGrid.addEventListener('adapters-loaded', () => {
+    const grid = orderedNicGrid;
     const key = 'avNetworkingTools:nic-order:v1';
     const storage = window.workspaceStorage || localStorage;
     const cards = () => Array.from(grid.querySelectorAll('.nic-card'));
@@ -73,4 +73,4 @@
             save();
         });
     });
-})();
+});

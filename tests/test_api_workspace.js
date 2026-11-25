@@ -6,7 +6,7 @@ const values = new Map();
 const key = 'avNetworkingTools:page-fields:api-modes';
 values.set(key, JSON.stringify({activeMode: 'ws', http: {url: 'https://http-device', method: 'POST', timeout: 12}, ws: {url: 'wss://ws-device', timeout: 20, verify: false}}));
 function element(id) {
-    if (!elements.has(id)) elements.set(id, {value: '', checked: true, handlers: {},
+    if (!elements.has(id)) elements.set(id, {value: '', checked: true, handlers: {}, dataset: {},
         addEventListener(name, fn) { this.handlers[name] = fn; },
         dispatchEvent(event) { this.handlers[event.type]?.(event); },
         replaceChildren() {}, add() {}});
@@ -23,6 +23,7 @@ const context = {
 vm.runInNewContext(fs.readFileSync('static/api_tools.js', 'utf8'), context);
 listeners.DOMContentLoaded();
 assert.equal(element('apiHeading').textContent, 'WebSocket');
+assert.equal(element('apiImport').dataset.workspaceImport, 'ws');
 assert.equal(element('apiUrl').value, 'wss://ws-device');
 assert.equal(element('apiVerify').checked, false);
 element('apiUrl').value = 'wss://user:password@ws-device/private?token=secret';
@@ -34,6 +35,7 @@ assert.equal(saved.ws.url, 'wss://ws-device');
 assert.equal(saved.http.method, 'POST');
 assert.ok(!values.get(key).includes('private'));
 tabs[0].handlers.click();
+assert.equal(element('apiImport').dataset.workspaceImport, 'http');
 assert.equal(element('apiUrl').value, 'https://http-device');
 assert.equal(element('apiMethod').value, 'POST');
 tabs[1].handlers.click();

@@ -31,6 +31,14 @@
 
     if (!nicSelect) return;
 
+    let scanReady = false;
+    function updateScanControls() {
+        const loadingAdapters = Boolean(nicSelect.dataset.adapterUrl);
+        nicSelect.disabled = loadingAdapters;
+        startScanButton.disabled = loadingAdapters || !scanReady;
+    }
+    nicSelect.addEventListener("adapters-loaded", updateScanControls);
+
     const scriptDialog = document.getElementById("scanScriptDialog");
     const scriptMessage = document.getElementById("scanScriptMessage");
     const scriptStatus = document.getElementById("scanScriptStatus");
@@ -253,7 +261,8 @@
 
         scanStatus.textContent = `${data.message || "Idle"}${progress}${monitorText}`;
 
-        startScanButton.disabled = data.running || data.lookup_running;
+        scanReady = !data.running && !data.lookup_running;
+        updateScanControls();
         lookupDetailsButton.style.display = data.can_lookup ? "" : "none";
         lookupDetailsButton.disabled = data.running || data.lookup_running;
         stopScanButton.disabled = !data.running && !data.lookup_running && !data.monitor_running;

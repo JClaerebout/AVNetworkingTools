@@ -111,17 +111,24 @@
         }
     }
 
+    const interfaceSelect = el("multicastNic");
+    function updateInterfaceControls() {
+        const loadingAdapters = Boolean(interfaceSelect.dataset.adapterUrl);
+        el("startMulticast").disabled = loadingAdapters || running || busy;
+        interfaceSelect.disabled = loadingAdapters || running || busy;
+        if (running) interfaceSelect.value = latest.interface;
+    }
+    interfaceSelect.addEventListener("adapters-loaded", updateInterfaceControls);
+
     function render(data) {
         latest = data;
         renderHealth(data);
         renderGroups(data.streams);
         running = Boolean(data.running);
         text("multicastStatus", data.message || "Idle");
-        el("startMulticast").disabled = running || busy;
+        updateInterfaceControls();
         el("stopMulticast").disabled = !running || busy;
-        el("multicastNic").disabled = running || busy;
         el("downloadMulticastReport").hidden = running || !data.interface;
-        if (running) el("multicastNic").value = data.interface;
         text("summaryCapture", running ? "Capturing" : data.error ? "Error" : "Stopped / idle");
         text("summaryInterface", data.interface || "-"); text("summaryIp", data.ip || "-");
         text("summaryStreams", data.active_streams || 0);
@@ -160,7 +167,13 @@
             render(data);
             if (!response.ok || data.success === false) alert(data.message || "Capture request failed.");
         } catch (error) { text("multicastStatus", `Capture request failed: ${error.message}`); }
-        finally { busy = false; if (latest) { el("startMulticast").disabled = running; el("stopMulticast").disabled = !running; el("multicastNic").disabled = running; } }
+        finally {
+            busy = false;
+            if (latest) {
+                updateInterfaceControls();
+                el("stopMulticast").disabled = !running;
+            }
+        }
     }
     el("startMulticast").addEventListener("click", () => command(urls.startUrl, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({interface:el("multicastNic").value})}));
     el("stopMulticast").addEventListener("click", () => command(urls.stopUrl, {method:"POST"}));

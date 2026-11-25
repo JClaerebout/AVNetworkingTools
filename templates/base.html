@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="action-token" content="{{ action_token }}">
     <script src="{{ url_for('static', filename='request_security.js') }}"></script>
-    <script id="workspaceDrafts" type="application/json">{{ workspace_drafts | tojson }}</script>
+    <script id="workspaceDrafts" type="application/json">{{ workspace_drafts() | tojson }}</script>
     <script src="{{ url_for('static', filename='workspace_state.js') }}"></script>
     <title>{% block title %}AVNetworkingTools{% endblock %}</title>
     <script>
@@ -59,7 +59,7 @@
                 <div class="primary-nav">
                     <a class="nav-link{% if current_endpoint == 'main.index' %} active{% endif %}" href="{{ url_for('main.index') }}"{% if current_endpoint == 'main.index' %} aria-current="page"{% endif %}>{{ icon('network') }} NICs</a>
                     <a class="nav-link{% if current_endpoint == 'main.ip_scan_page' %} active{% endif %}" href="{{ url_for('main.ip_scan_page') }}"{% if current_endpoint == 'main.ip_scan_page' %} aria-current="page"{% endif %}>{{ icon('scan') }} IP Scan</a>
-                    <a class="nav-link{% if current_endpoint == 'main.ping_page' %} active{% endif %}" href="{{ url_for('main.ping_page') }}"{% if current_endpoint == 'main.ping_page' %} aria-current="page"{% endif %}>{{ icon('ping') }} Ping</a>
+                    <a class="nav-link{% if current_endpoint == 'main.ping_page' %} active{% endif %}" href="{{ url_for('main.ping_page') }}"{% if current_endpoint == 'main.ping_page' %} aria-current="page"{% endif %}>{{ icon('ping') }} Diagnostics</a>
                     <a class="nav-link{% if current_endpoint == 'main.connection_test_page' %} active{% endif %}" href="{{ url_for('main.connection_test_page') }}"{% if current_endpoint == 'main.connection_test_page' %} aria-current="page"{% endif %}>{{ icon('connect') }} Connect</a>
                 </div>
                 <details class="more-nav">
@@ -75,7 +75,9 @@
                 </details>
                 <button class="nav-link" id="workspaceOpen" type="button">{{ icon('workspace') }} Workspaces</button>
                 <button id="themeToggle" class="theme-toggle" type="button">
-                    <span class="theme-toggle-icon" aria-hidden="true">{{ icon('sun') }}</span>
+                    {{ icon('sun', 'theme-icon-light') }}
+                    {{ icon('moon', 'theme-icon-dark') }}
+                    {{ icon('theme-auto', 'theme-icon-auto') }}
                     <span class="theme-toggle-label visually-hidden">Theme: Auto</span>
                 </button>
             </div>
@@ -155,5 +157,8 @@
 <script src="{{ url_for('static', filename='status_requests.js') }}?v=1"></script>
 <script src="{{ url_for('static', filename='activity.js') }}?v=1" data-activity-url="{{ url_for('main.active_tasks') }}"></script>
 {% block scripts %}{% endblock %}
+{% if request.endpoint in ['main.index', 'main.ip_scan_page', 'main.multicast_page'] %}
+<script src="{{ url_for('static', filename='adapter_content.js') }}"></script>
+{% endif %}
 </body>
 </html>

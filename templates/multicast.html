@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from 'adapter_loading.html' import adapter_loading %}
 
 {% block title %}AV Network Health Check - AVNetworkingTools{% endblock %}
 {% block subtitle %}Find common AV network problems, with technical details when you need them.{% endblock %}
@@ -16,21 +17,13 @@
         and sign out and back in before retrying. This grants packet capture access to your user account.</p>
     {% endif %}
 
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% for category, message in messages %}
-            <div class="flash {{ category }}">{{ message }}</div>
-        {% endfor %}
-    {% endwith %}
-
     <div class="row scan-options-row">
         <div>
             <label for="multicastNic">Interface</label>
-            <select id="multicastNic">
+            <select id="multicastNic" data-adapter-url="{{ url_for('main.multicast_adapters') }}" aria-busy="true" disabled>
                 <option value="">Select interface...</option>
-                {% for nic in nics %}
-                <option value="{{ nic.name }}">{{ nic.name }} - {{ nic.ip }}</option>
-                {% endfor %}
             </select>
+            {{ adapter_loading() }}
         </div>
         <div>
             <label>Status</label>
@@ -39,7 +32,7 @@
     </div>
 
     <div class="actions">
-        <button id="startMulticast" class="btn" type="button">Start Health Check</button>
+        <button id="startMulticast" class="btn" type="button" disabled>Start Health Check</button>
         <button id="stopMulticast" class="btn warn" type="button" disabled>Stop Check</button>
         <button id="downloadMulticastReport" class="btn secondary" type="button" hidden>Download Report</button>
         <span id="multicastExportStatus" class="export-status" role="status" aria-live="polite"></span>

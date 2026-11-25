@@ -3,6 +3,7 @@ import ipaddress
 import threading
 import re
 import time
+from contextlib import contextmanager
 from datetime import datetime
 from typing import Dict, List, Optional
 
@@ -91,6 +92,27 @@ def get_wmi():
     return win32com.client.GetObject("winmgmts:")
 
 
+@contextmanager
+def _wmi_thread():
+    # Waitress and the network workers can each call WMI on a different thread.
+    import pythoncom
+    from winerror import RPC_E_CHANGED_MODE
+
+    try:
+        pythoncom.CoInitializeEx(pythoncom.COINIT_APARTMENTTHREADED)
+    except pythoncom.error as exc:
+        if exc.hresult != RPC_E_CHANGED_MODE:
+            raise
+        # The thread already has a COM apartment of a different type.
+        yield
+        return
+    try:
+        yield
+    finally:
+        pythoncom.CoUninitialize()
+
+
+@_wmi_thread()
 def is_interface_connected(interface_name: str) -> bool:
     wmi = get_wmi()
     adapters = wmi.ExecQuery(
@@ -125,6 +147,7 @@ def sort_nics(nics: List[Dict]) -> List[Dict]:
     return sorted(nics, key=nic_priority)
 
 
+@_wmi_thread()
 def get_nics() -> List[Dict]:
     wmi = get_wmi()
     metrics = get_interface_metrics(cached=True)

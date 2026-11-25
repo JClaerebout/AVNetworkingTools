@@ -31,7 +31,9 @@ In **IP Scan**, choose an adapter and start a quick scan for reachable addresses
 
 On macOS, the home page shows network service order instead of a Windows metric. Changing network settings requests administrator authorization for that operation.
 
-Use **Ping** for reachability and **Connect** for TCP, UDP, SSH, or serial tests. **Scripts** can send command sequences to multiple targets. Saved connection presets and scripts do not retain passwords.
+Use **Diagnostics** for Ping, Traceroute, or Combined route monitoring and **Connect** for TCP, UDP, SSH, or serial tests. **Scripts** can send command sequences to multiple targets. Saved connection presets and scripts do not retain passwords.
+
+**Diagnostics** accepts an IP address or hostname. Ping shows destination latency and packet loss. Traceroute sends progressively higher IPv4 TTL probes to discover Layer 3 hops. Combined interleaves destination pings with repeated route sweeps and records responding-address changes. Intermediate hop loss measures missing ICMP responses and may reflect router rate limiting. Ordinary Layer 2 switches do not appear. Copy the route or export results as TXT or CSV. IPv6 is available in Ping with automatic routing.
 
 ### Check AV traffic
 
@@ -88,10 +90,11 @@ not a workspace preset and missing addresses are never recreated automatically.
 Restore previous includes captured secondary addresses when explicitly confirmed.
 Ambiguous addresses cannot be removed through the app.
 
-IP Scan lists active secondary subnets as additional source choices. Ping to a
-literal IPv4 target binds the secondary address when it is the unique most-specific
-local subnet match; hostname targets retain normal OS source selection. Other
-tools continue using their existing source selection.
+IP Scan lists active secondary subnets as additional source choices. All three
+Diagnostics modes can use an active primary or secondary IPv4 address. Automatic
+routing selects a secondary source when it is the unique most-specific local
+subnet match. Windows checks the routing table before sending a source-bound
+probe. macOS binds the ICMP socket to the selected interface and source address.
 
 Native Windows ABI and operations have mocked coverage. Real DHCP lease renewal,
 network hardware, route behavior, reconnects and conflict handling require testing
@@ -100,4 +103,4 @@ on both operating systems before deployment.
 Native API references: [Windows IP Helper address creation](https://learn.microsoft.com/en-us/windows/win32/api/netioapi/nf-netioapi-createunicastipaddressentry)
 and [New-NetIPAddress DHCP behavior](https://learn.microsoft.com/en-us/powershell/module/nettcpip/new-netipaddress).
 Windows `SkipAsSource` means other applications may need an explicit source binding;
-the app provides this for the secondary IP Scan choices and literal IPv4 Ping targets.
+the app provides this for secondary addresses in IP Scan and Diagnostics.
